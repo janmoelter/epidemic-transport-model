@@ -1,7 +1,6 @@
 CXX=clang++
 #CXX=g++
 CXXFLAGS=-g -std=c++17 -O3
-CXXFLAGS+=-Wno-string-compare -Wno-null-conversion
 LDFLAGS=-ligraph -lxml2 -lblas -lm #-lgsl -lblas -lm
 RM=rm -rf
 MKDIR=mkdir -p

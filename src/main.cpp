@@ -21,18 +21,18 @@ std::vector<double> linspace(double min, double max, size_t N)
 
 std::map<std::string, std::string> argparse(int argc, char** argv)
 {
-	std::map<std::string, std::string> argm { {"transport-network-file", ""}, {"community-size", ""}, {"community-degree", ""}, {"prevalence", ""}, {"mobility-rate", ""}, {"infection-rate", ""}, {"recovery-rate", ""}, {"coupling", ""}, {"time", ""}, {"output-file", ""}, };
+	std::map<std::string, std::string> argm { {"transport-network-file", ""}, {"community-size", ""}, {"community-degree", ""}, {"prevalence", ""}, {"mobility-rate", ""}, {"community-infection-rate", ""}, {"transport-infection-rate", ""}, {"recovery-rate", ""}, {"time", ""}, {"output-file", ""}, };
 
-	const char* const short_opts = "w:N:k:p:m:b:g:c:T:o:h";
+	const char* const short_opts = "w:N:k:p:m:B:b:g:T:o:h";
 	const option long_opts[] = {
 		{"transport-network-file", required_argument, nullptr, 'w'},
 		{"community-size", required_argument, nullptr, 'N'},
 		{"community-degree", required_argument, nullptr, 'k'},
 		{"prevalence", required_argument, nullptr, 'p'},
 		{"mobility-rate", required_argument, nullptr, 'm'},
-		{"infection-rate", required_argument, nullptr, 'b'},
+		{"community-infection-rate", required_argument, nullptr, 'B'},
+		{"transport-infection-rate", required_argument, nullptr, 'b'},
 		{"recovery-rate", required_argument, nullptr, 'g'},
-		{"coupling", required_argument, nullptr, 'c'},
 		{"time", required_argument, nullptr, 'T'},
 		{"output-file", required_argument, nullptr, 'o'},
 		{"help", no_argument, nullptr, 'h'},
@@ -63,14 +63,14 @@ std::map<std::string, std::string> argparse(int argc, char** argv)
 			case 'm':
 				argm["mobility-rate"] = optarg;
 				break;
+			case 'B':
+				argm["community-infection-rate"] = optarg;
+				break;
 			case 'b':
-				argm["infection-rate"] = optarg;
+				argm["transport-infection-rate"] = optarg;
 				break;
 			case 'g':
 				argm["recovery-rate"] = optarg;
-				break;
-			case 'c':
-				argm["coupling"] = optarg;
 				break;
 			case 'T':
 				argm["time"] = optarg;
@@ -88,7 +88,7 @@ std::map<std::string, std::string> argparse(int argc, char** argv)
 	return argm;
 }
 
-// ./bin/simulation -w transport_network.graphml -N 200 -k 5 -p 0.5 -m 10 -b 0.25 -g 1 -c 1 -T 10
+// ./bin/simulation -w transport_network.graphml -N 200 -k 5 -p 0.5 -m 10 -B 0.25 -b 0.25 -g 1 -T 10
 
 int main(int argc, char **argv)
 {
@@ -99,9 +99,9 @@ int main(int argc, char **argv)
 	int community_degree = std::stoi(argm["community-degree"]);
 	double prevalence = std::stod(argm["prevalence"]);
 	double mobility_rate = std::stod(argm["mobility-rate"]);
-	double infection_rate = std::stod(argm["infection-rate"]);
+	double community_infection_rate = std::stod(argm["community-infection-rate"]);
+	double transport_infection_rate = std::stod(argm["transport-infection-rate"]);
 	double recovery_rate = std::stod(argm["recovery-rate"]);
-	double coupling = std::stod(argm["coupling"]);
 
 	double time = std::stod(argm["time"]);
 
@@ -113,14 +113,14 @@ int main(int argc, char **argv)
 	std::cout << "# community degree : " << community_degree << std::endl;
 	std::cout << "# prevalence : " << prevalence << std::endl;
 	std::cout << "# mobility rate : " << mobility_rate << std::endl;
-	std::cout << "# infection rate : " << infection_rate << std::endl;
+	std::cout << "# community infection rate : " << community_infection_rate << std::endl;
+	std::cout << "# transport infection rate : " << transport_infection_rate << std::endl;
 	std::cout << "# recovery rate : " << recovery_rate << std::endl;
-	std::cout << "# coupling parameter : " << coupling << std::endl;
 	std::cout << std::setfill('#') << std::setw(80) << "" << std::endl;
 	std::cout << std::setfill(' ');
 
-	epidemic_transport_model _epidemic_transport_model(transport_network_file, community_size, community_degree, prevalence, mobility_rate, infection_rate, recovery_rate, coupling);
-	std::list<std::tuple<double, int, double>> timeseries = _epidemic_transport_model.run(time);
+	epidemic_transport_model _epidemic_transport_model(transport_network_file, community_size, community_degree, prevalence, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate);
+	std::list<std::tuple<double, int, double>> timeseries = _epidemic_transport_model.simulate(time);
 
 
 	std::ofstream fstream;
@@ -132,9 +132,9 @@ int main(int argc, char **argv)
 	fstream << "# community degree : " << community_degree << std::endl;
 	fstream << "# prevalence : " << prevalence << std::endl;
 	fstream << "# mobility rate : " << mobility_rate << std::endl;
-	fstream << "# infection rate : " << infection_rate << std::endl;
+	fstream << "# community infection rate : " << community_infection_rate << std::endl;
+	fstream << "# transport infection rate : " << transport_infection_rate << std::endl;
 	fstream << "# recovery rate : " << recovery_rate << std::endl;
-	fstream << "# coupling parameter : " << coupling << std::endl;
 	fstream << std::setfill('#') << std::setw(80) << "" << std::endl;
 	fstream << std::setfill(' ');
 	
@@ -145,65 +145,6 @@ int main(int argc, char **argv)
 	fstream.close();
 	
 	std::cout << "*** END main ***" << std::endl;
-
-
-	//int trials = 10;
-	//
-	//double _mobility_rate = 1;
-	//double _infection_rate;
-	//double _recovery_rate = 10;
-	//double _coupling;
-	//
-	//std::vector<double> beta_gamma = linspace(0.05, 0.25, 50);
-	//std::vector<double> eta = linspace(0, 1, 50);
-	//
-	//std::vector<double> prevalence;
-	//
-	//std::list<std::tuple<double, int, double>> timeseries;
-	//
-	//std::cout << std::setfill('#') << std::setw(80) << "" << std::endl;
-	//std::cout << "# community size : " << _community_size << std::endl;
-	//std::cout << "# k : " << k << std::endl;
-	//std::cout << "# mobility rate : " << _mobility_rate << std::endl;
-	//std::cout << "# infection rate : " << "*" << std::endl;
-	//std::cout << "# recovery rate : " << _recovery_rate << std::endl;
-	//std::cout << "# coupling parameter : " << "*" << std::endl;
-	//std::cout << std::setfill('#') << std::setw(80) << "" << std::endl;
-	//
-	//std::cout << " β/γ \\  η  \t";
-	//for (int j = 0; j < eta.size(); j++)
-	//{
-	//	std::cout << std::fixed << std::setprecision(9) << eta[j] << '\t' << std::flush;
-	//}
-	//std::cout << std::endl;
-	//
-	//for (int i = 0; i < beta_gamma.size(); i++)
-	//{
-	//	_infection_rate = _recovery_rate * beta_gamma[i];
-	//
-	//	std::cout << std::fixed << std::setprecision(9) << beta_gamma[i] << '\t' << std::flush;
-	//
-	//	for (int j = 0; j < eta.size(); j++)
-	//	{
-	//		_coupling = eta[j];
-	//
-	//		for (int t = 0; t < trials; t++)
-	//		{
-	//			epidemic_transport_model _epidemic_transport_model(_community_size, k, 0.1, _mobility_rate, _infection_rate, _recovery_rate, _coupling);
-	//
-	//			timeseries = _epidemic_transport_model.run(5);
-	//			
-	//			prevalence.push_back(std::get<2>(timeseries.back()));
-	//			//std::cout << std::get<2>(timeseries.back()) << std::endl;
-	//		}
-	//
-	//		std::cout << std::fixed << std::setprecision(9) << std::accumulate(prevalence.begin(), prevalence.end(), 0.0) / prevalence.size() << '\t' << std::flush;
-	//
-	//		prevalence.clear();
-	//	}
-	//	std::cout << std::endl;
-	//
-	//}
 
 	return 0;
 }
