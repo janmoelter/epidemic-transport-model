@@ -378,30 +378,38 @@ void epidemic_transport_model::infection_spreading(const event& e)
 {
 	double T;
 
+	double infection_rate;
+	double T_infection_path_breaking;
+
 	switch (e.action)
 	{
 		case epidemic_transport_model::event::ACTION::COMMUNITY_INFECTION:
-			if (this->state_health_future_recovery_time[e.subject] < this->state_health_future_recovery_time[e.sender])
-			{
-				T = std::max(e.time, this->state_health_future_recovery_time[e.subject]) + this->exponential_distribution(this->random_number_engine) / this->community_infection_rate;
-
-				if (T < this->state_health_future_recovery_time[e.sender] && T < std::min(std::numeric_limits<double>::infinity(), std::numeric_limits<double>::infinity()))
-				{
-					if (T < this->simulation_time)
-					{
-						this->event_queue.emplace(T, e.subject, e.sender, e.action);
-					}
-				}
-			}
+			infection_rate = this->community_infection_rate;
+			T_infection_path_breaking = std::numeric_limits<double>::infinity();
 
 			break;
 
 		case epidemic_transport_model::event::ACTION::TRANSPORT_INFECTION:
+			infection_rate = this->transport_infection_rate;
+			T_infection_path_breaking = std::min(this->state_site_future_transition_time[e.subject], this->state_site_future_transition_time[e.sender]);
+
+			break;
+
+		default:
+			break;
+	}
+
+
+	switch (e.action)
+	{
+		case epidemic_transport_model::event::ACTION::COMMUNITY_INFECTION:
+		case epidemic_transport_model::event::ACTION::TRANSPORT_INFECTION:
+
 			if (this->state_health_future_recovery_time[e.subject] < this->state_health_future_recovery_time[e.sender])
 			{
-				T = std::max(e.time, this->state_health_future_recovery_time[e.subject]) + this->exponential_distribution(this->random_number_engine) / this->transport_infection_rate;
+				T = std::max(e.time, this->state_health_future_recovery_time[e.subject]) + this->exponential_distribution(this->random_number_engine) / infection_rate;
 				
-				if (T < this->state_health_future_recovery_time[e.sender] && T < std::min(this->state_site_future_transition_time[e.subject], this->state_site_future_transition_time[e.sender]))
+				if (T < this->state_health_future_recovery_time[e.sender] && T < T_infection_path_breaking)
 				{
 					if (T < this->simulation_time)
 					{
