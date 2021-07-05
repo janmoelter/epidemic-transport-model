@@ -1,10 +1,8 @@
 #include <iostream>
 #include <fstream>
 
-#include <vector>
-#include <map>
-
 #include <getopt.h>
+#include <map>
 
 #include "epidemic_transport_model.hpp"
 
@@ -96,10 +94,11 @@ std::map<std::string, std::string> argparse(int argc, char** argv)
 	return argm;
 }
 
-// ./bin/simulation -w transport_network.graphml -N 200 -k 5 -p 0.5 -m 10 -B 0.25 -b 0.25 -g 1 -T 10
-
 int main(int argc, char **argv)
 {
+	igraph_set_attribute_table(&igraph_cattribute_table);
+
+
 	std::map<std::string, std::string> argm = argparse(argc, argv);
 
 	std::string transport_network_file = argm["transport-network-file"];
@@ -118,13 +117,20 @@ int main(int argc, char **argv)
 
 	bool verbose = (bool)std::stoi(argm["verbose"]);
 
+	igraph_t transport_network;
+
+	FILE *ifile;
+
+	ifile = fopen(transport_network_file.c_str(), "r");
+	if (ifile == 0) {
+		std::cout << "Cannot open transport network file." << std::endl;
+	}
+
+	igraph_read_graph_graphml(&transport_network, ifile, 0);
+	fclose(ifile);
 
 
-
-
-
-
-	epidemic_transport_model _epidemic_transport_model(transport_network_file, community_size, community_degree, prevalence, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
+	epidemic_transport_model _epidemic_transport_model(&transport_network, community_size, community_degree, prevalence, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
 
 	if (verbose)
 	{
@@ -137,6 +143,10 @@ int main(int argc, char **argv)
 	fstream.open(output_file);
 	fstream << _epidemic_transport_model << std::endl;
 	fstream.close();
+
+
+	igraph_cattribute_remove_all(&transport_network, true, true, true);
+	igraph_destroy(&transport_network);
 	
 	if (verbose)
 	{

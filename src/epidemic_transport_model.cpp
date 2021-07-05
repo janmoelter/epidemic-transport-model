@@ -67,36 +67,17 @@ std::ostream& operator<<(std::ostream& ostream, const epidemic_transport_model::
 
 
 
-epidemic_transport_model::epidemic_transport_model(const std::string& transport_network_file, const int& community_size, const int& community_network_degree, const double& initial_prevalence, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
+epidemic_transport_model::epidemic_transport_model(const igraph_t *transport_network, const int& community_size, const int& community_network_degree, const double& initial_prevalence, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
 {
-	igraph_set_attribute_table(&igraph_cattribute_table);
-
 	std::mt19937 gen(this->random_number_engine());
 
+	// COPY TRANSPORT NETWORK
 
-	// LOAD TRANSPORT NETWORK FROM FILE
-
-	this->transport_network_file = transport_network_file;
-
-	FILE *ifile;
-
-	ifile = fopen(this->transport_network_file.c_str(), "r");
-	if (ifile == 0) {
-		std::cout << "Cannot open file." << std::endl;
-	}
-
-	igraph_read_graph_graphml(&this->transport_network, ifile, 0);
-	fclose(ifile);
-
-	//if (igraph_is_directed(&this->transport_network))
-	//{
-	//	igraph_to_directed(&this->transport_network, IGRAPH_TO_DIRECTED_MUTUAL);
-	//}
-
-	this->world_size = igraph_vcount(&this->transport_network);
-
+	igraph_copy(&this->transport_network, transport_network);
 
 	// SET REMAINING PARAMETERS
+
+	this->world_size = igraph_vcount(&this->transport_network);
 
 	this->community_size = community_size;
 	this->community_network_degree = community_network_degree;
@@ -226,7 +207,7 @@ std::ostream& operator<<(std::ostream& ostream, const epidemic_transport_model& 
 	//ostream << std::fixed << "[" << std::setw(10) << std::setprecision(6) << e.time << "]";
 
 	ostream << std::setfill('*') << std::setw(80) << "" << std::endl;
-	ostream << "* transport network : " << _.transport_network_file << std::endl;
+	ostream << "* transport network : " << "*" << std::endl;
 	ostream << "* community size : " << _.community_size << std::endl;
 	ostream << "* community degree : " << _.community_network_degree << std::endl;
 	ostream << "* initial prevalence : " << _.initial_prevalence << std::endl;

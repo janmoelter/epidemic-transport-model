@@ -13,12 +13,10 @@
 #include <list>
 #include <tuple>
 #include <set>
+#include <queue>
 
 #include <limits>
-
 #include <algorithm>
-
-#include <queue>
 
 #include <random>
 
@@ -28,7 +26,7 @@ class epidemic_transport_model
 {
 
 public:
-	epidemic_transport_model(const std::string &, const int &, const int &, const double &, const double &, const double &, const double &, const double &, const double &);
+	epidemic_transport_model(const igraph_t *, const int &, const int &, const double &, const double &, const double &, const double &, const double &, const double &);
 	~epidemic_transport_model();
 
 
@@ -77,8 +75,6 @@ private:
 	igraph_t epidemic_network;
 
 	// PARAMATERS
-
-	std::string transport_network_file;
 
 	int world_size;
 	int community_size;
