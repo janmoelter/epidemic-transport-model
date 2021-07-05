@@ -21,9 +21,9 @@ std::vector<double> linspace(double min, double max, size_t N)
 
 std::map<std::string, std::string> argparse(int argc, char** argv)
 {
-	std::map<std::string, std::string> argm { {"transport-network-file", ""}, {"community-size", ""}, {"community-degree", ""}, {"prevalence", ""}, {"mobility-rate", ""}, {"community-infection-rate", ""}, {"transport-infection-rate", ""}, {"recovery-rate", ""}, {"time", ""}, {"output-file", ""}, };
+	std::map<std::string, std::string> argm { {"transport-network-file", ""}, {"community-size", ""}, {"community-degree", ""}, {"prevalence", ""}, {"mobility-rate", ""}, {"community-infection-rate", ""}, {"transport-infection-rate", ""}, {"recovery-rate", ""}, {"immunity-loss-rate", ""}, {"time", ""}, {"output-file", ""}, {"verbose", "0"}, };
 
-	const char* const short_opts = "w:N:k:p:m:B:b:g:T:o:h";
+	const char* const short_opts = "w:N:k:p:m:B:b:g:s:T:o:vh";
 	const option long_opts[] = {
 		{"transport-network-file", required_argument, nullptr, 'w'},
 		{"community-size", required_argument, nullptr, 'N'},
@@ -33,8 +33,10 @@ std::map<std::string, std::string> argparse(int argc, char** argv)
 		{"community-infection-rate", required_argument, nullptr, 'B'},
 		{"transport-infection-rate", required_argument, nullptr, 'b'},
 		{"recovery-rate", required_argument, nullptr, 'g'},
+		{"immunity-loss-rate", required_argument, nullptr, 's'},
 		{"time", required_argument, nullptr, 'T'},
 		{"output-file", required_argument, nullptr, 'o'},
+		{"verbose", no_argument, nullptr, 'v'},
 		{"help", no_argument, nullptr, 'h'},
 		{nullptr, no_argument, nullptr, 0}
 	};
@@ -72,11 +74,17 @@ std::map<std::string, std::string> argparse(int argc, char** argv)
 			case 'g':
 				argm["recovery-rate"] = optarg;
 				break;
+			case 's':
+				argm["immunity-loss-rate"] = optarg;
+				break;
 			case 'T':
 				argm["time"] = optarg;
 				break;
 			case 'o':
 				argm["output-file"] = optarg;
+				break;
+			case 'v':
+				argm["verbose"] = "1";
 				break;
 			case 'h':
 			case '?':
@@ -102,49 +110,38 @@ int main(int argc, char **argv)
 	double community_infection_rate = std::stod(argm["community-infection-rate"]);
 	double transport_infection_rate = std::stod(argm["transport-infection-rate"]);
 	double recovery_rate = std::stod(argm["recovery-rate"]);
+	double immunity_loss_rate = std::stod(argm["immunity-loss-rate"]);
 
 	double time = std::stod(argm["time"]);
 
 	std::string output_file = argm["output-file"];
 
-	std::cout << std::setfill('#') << std::setw(80) << "" << std::endl;
-	std::cout << "# transport network : " << transport_network_file << std::endl;
-	std::cout << "# community size : " << community_size << std::endl;
-	std::cout << "# community degree : " << community_degree << std::endl;
-	std::cout << "# prevalence : " << prevalence << std::endl;
-	std::cout << "# mobility rate : " << mobility_rate << std::endl;
-	std::cout << "# community infection rate : " << community_infection_rate << std::endl;
-	std::cout << "# transport infection rate : " << transport_infection_rate << std::endl;
-	std::cout << "# recovery rate : " << recovery_rate << std::endl;
-	std::cout << std::setfill('#') << std::setw(80) << "" << std::endl;
-	std::cout << std::setfill(' ');
-
-	epidemic_transport_model _epidemic_transport_model(transport_network_file, community_size, community_degree, prevalence, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate);
-	std::list<std::tuple<double, int, double>> timeseries = _epidemic_transport_model.simulate(time);
+	bool verbose = (bool)std::stoi(argm["verbose"]);
 
 
+
+
+
+
+
+	epidemic_transport_model _epidemic_transport_model(transport_network_file, community_size, community_degree, prevalence, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
+
+	if (verbose)
+	{
+		std::cout << _epidemic_transport_model << std::endl;
+	}
+
+	_epidemic_transport_model.simulate(time);
+	
 	std::ofstream fstream;
 	fstream.open(output_file);
-	
-	fstream << std::setfill('#') << std::setw(80) << "" << std::endl;
-	fstream << "# transport network : " << transport_network_file << std::endl;
-	fstream << "# community size : " << community_size << std::endl;
-	fstream << "# community degree : " << community_degree << std::endl;
-	fstream << "# prevalence : " << prevalence << std::endl;
-	fstream << "# mobility rate : " << mobility_rate << std::endl;
-	fstream << "# community infection rate : " << community_infection_rate << std::endl;
-	fstream << "# transport infection rate : " << transport_infection_rate << std::endl;
-	fstream << "# recovery rate : " << recovery_rate << std::endl;
-	fstream << std::setfill('#') << std::setw(80) << "" << std::endl;
-	fstream << std::setfill(' ');
-	
-	for (std::tuple<double, int, double> const& e: timeseries)
-	{
-		fstream << std::fixed << std::setprecision(9) << std::get<0>(e) << '\t' << std::get<1>(e) << '\t' << std::setprecision(12) << std::get<2>(e) << std::endl;
-	}
+	fstream << _epidemic_transport_model << std::endl;
 	fstream.close();
 	
-	std::cout << "*** END main ***" << std::endl;
+	if (verbose)
+	{
+		std::cout << "*** END main ***" << std::endl;
+	}
 
 	return 0;
 }

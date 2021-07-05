@@ -22,29 +22,40 @@ epidemic_transport_model::event::~event()
 
 
 bool operator<(epidemic_transport_model::event const& e, epidemic_transport_model::event const& f) {
-	return e.time > f.time;
+	if (e.time != f.time)
+	{
+		return e.time > f.time;
+	}
+	else
+	{
+		return (e.time >= f.time) && (e.action >= f.action);
+	}
 }
 
 std::ostream& operator<<(std::ostream& ostream, const epidemic_transport_model::event& e)
 {
-	ostream << std::fixed << std::setw(10) << std::setprecision(6) << e.time << " : " << e.subject;
+	ostream << std::fixed << "[" << std::setw(10) << std::setprecision(6) << e.time << "]";
 
 	switch (e.action)
 	{
 		case epidemic_transport_model::event::ACTION::MOVE:
-			ostream << " (MOVE)";
+			ostream << " MOVE : " << e.subject;
 			break;
 		
 		case epidemic_transport_model::event::ACTION::COMMUNITY_INFECTION:
-			ostream << " <-- " << e.sender << " (INFECTION)";
+			ostream << " COMMUNITY INFECTION: " << e.subject << " <--- " << e.sender;
 			break;
 
 		case epidemic_transport_model::event::ACTION::TRANSPORT_INFECTION:
-			ostream << " <-- " << e.sender << " (TRANSIENT INFECTION)";
+			ostream << " TRANSPORT INFECTION: " << e.subject << " <--- " << e.sender;
 			break;
 
 		case epidemic_transport_model::event::ACTION::RECOVERY:
-		ostream << " (RECOVERY)";
+			ostream << " RECOVERY : " << e.subject;
+			break;
+
+		case epidemic_transport_model::event::ACTION::IMMUNITY_LOSS:
+			ostream << " IMMUNITY LOSS : " << e.subject;
 			break;
 
 		default:
@@ -56,7 +67,7 @@ std::ostream& operator<<(std::ostream& ostream, const epidemic_transport_model::
 
 
 
-epidemic_transport_model::epidemic_transport_model(const std::string& transport_network_file, const int& community_size, const int& community_network_degree, const double& initial_prevalence, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate)
+epidemic_transport_model::epidemic_transport_model(const std::string& transport_network_file, const int& community_size, const int& community_network_degree, const double& initial_prevalence, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
 {
 	igraph_set_attribute_table(&igraph_cattribute_table);
 
@@ -65,9 +76,11 @@ epidemic_transport_model::epidemic_transport_model(const std::string& transport_
 
 	// LOAD TRANSPORT NETWORK FROM FILE
 
+	this->transport_network_file = transport_network_file;
+
 	FILE *ifile;
 
-	ifile = fopen(transport_network_file.c_str(), "r");
+	ifile = fopen(this->transport_network_file.c_str(), "r");
 	if (ifile == 0) {
 		std::cout << "Cannot open file." << std::endl;
 	}
@@ -93,6 +106,7 @@ epidemic_transport_model::epidemic_transport_model(const std::string& transport_
 	this->community_infection_rate = community_infection_rate;
 	this->transport_infection_rate = transport_infection_rate;
 	this->recovery_rate = recovery_rate;
+	this->immunity_loss_rate = immunity_loss_rate;
 
 
 	// CREATE A RANDOM EPIDEMIC COMMUNITY NETWORK
@@ -130,8 +144,9 @@ epidemic_transport_model::epidemic_transport_model(const std::string& transport_
 		this->site_occupancy[0].insert(n);
 	}
 	
-	this->state_site_future_transition_time = std::vector<double>(this->community_size, 0.);
-	this->state_health_future_recovery_time = std::vector<double>(this->community_size, 0.);
+	this->state_site_future_transition_time = std::vector<double>(this->community_size, -std::numeric_limits<double>::infinity());
+	this->state_health_future_recovery_time = std::vector<double>(this->community_size, -std::numeric_limits<double>::infinity());
+	this->state_health_future_immunity_loss_time = std::vector<double>(this->community_size, -std::numeric_limits<double>::infinity());
 }
 
 epidemic_transport_model::~epidemic_transport_model()
@@ -144,7 +159,7 @@ epidemic_transport_model::~epidemic_transport_model()
 }
 
 
-std::list<std::tuple<double, int, double>> epidemic_transport_model::simulate(const double& time, const bool& verbose)
+std::list<std::tuple<double, int, int, int, double, double, double>> epidemic_transport_model::simulate(const double& time, const bool& verbose)
 {
 	this->simulation_time = time;
 	this->initialise_dynamics();
@@ -156,6 +171,11 @@ std::list<std::tuple<double, int, double>> epidemic_transport_model::simulate(co
 	{
 		e = this->event_queue.top();
 		this->event_queue.pop();
+
+		if (verbose)
+		{
+			std::cout << e << std::endl;
+		}
 
 		switch (e.action)
 		{
@@ -170,6 +190,10 @@ std::list<std::tuple<double, int, double>> epidemic_transport_model::simulate(co
 
 			case epidemic_transport_model::event::ACTION::RECOVERY:
 				this->recovery_event_handler(e);
+				break;
+
+			case epidemic_transport_model::event::ACTION::IMMUNITY_LOSS:
+				this->immunity_loss_event_handler(e);
 				break;
 
 			default:
@@ -191,9 +215,60 @@ std::list<std::tuple<double, int, double>> epidemic_transport_model::simulate(co
 	return this->timeseries;
 }
 
-std::list<std::tuple<double, int, double>> epidemic_transport_model::simulate(const double& time)
+std::list<std::tuple<double, int, int, int, double, double, double>> epidemic_transport_model::simulate(const double& time)
 {
 	return epidemic_transport_model::simulate(time, false);
+}
+
+
+std::ostream& operator<<(std::ostream& ostream, const epidemic_transport_model& _)
+{
+	//ostream << std::fixed << "[" << std::setw(10) << std::setprecision(6) << e.time << "]";
+
+	ostream << std::setfill('*') << std::setw(80) << "" << std::endl;
+	ostream << "* transport network : " << _.transport_network_file << std::endl;
+	ostream << "* community size : " << _.community_size << std::endl;
+	ostream << "* community degree : " << _.community_network_degree << std::endl;
+	ostream << "* initial prevalence : " << _.initial_prevalence << std::endl;
+	ostream << "* mobility rate : " << _.mobility_rate << std::endl;
+	ostream << "* community infection rate : " << _.community_infection_rate << std::endl;
+	ostream << "* transport infection rate : " << _.transport_infection_rate << std::endl;
+	ostream << "* recovery rate : " << _.recovery_rate << std::endl;
+	ostream << "* immunity loss rate : " << _.immunity_loss_rate << std::endl;
+	ostream << std::setfill('*') << std::setw(80) << "" << std::endl;
+	ostream << std::setfill(' ');
+
+	if (_.timeseries.size() > 0)
+	{
+		int w_T = (int)ceil(log10(_.simulation_time));
+		int w_N = (int)ceil(log10(_.community_size));
+
+		ostream << std::fixed << std::right << std::setw(w_T + 1 + 9) << "time" << '\t';
+
+		ostream << std::setw(w_N) << "#S" << '\t';
+		ostream << std::setw(w_N) << "#I" << '\t';
+		ostream << std::setw(w_N) << "#R" << '\t';
+			
+		ostream << std::setw(1 + 1 + 9) << "S" << '\t';
+		ostream << std::setw(1 + 1 + 9) << "I" << '\t';
+		ostream << std::setw(1 + 1 + 9) << "R" << std::endl;
+
+		for (auto& e: _.timeseries)
+		{
+			ostream << std::fixed << std::right << std::setw(w_T + 1 + 9) << std::setprecision(9) << std::get<0>(e) << '\t';
+
+			ostream << std::setw(w_N) << std::get<1>(e) << '\t';
+			ostream << std::setw(w_N) << std::get<2>(e) << '\t';
+			ostream << std::setw(w_N) << std::get<3>(e) << '\t';
+			
+			ostream << std::setw(1 + 1 + 9) << std::setprecision(9) << std::get<4>(e) << '\t';
+			ostream << std::setw(1 + 1 + 9) << std::setprecision(9) << std::get<5>(e) << '\t';
+			ostream << std::setw(1 + 1 + 9) << std::setprecision(9) << std::get<6>(e) << std::endl;
+		}
+
+	}
+
+	return ostream;
 }
 
 
@@ -348,12 +423,22 @@ void epidemic_transport_model::infection_event_handler(const event& e)
 		this->state_health[e.subject] = epidemic_transport_model::HEALTH::I;
 
 
+		// DETERMINE FUTURE RECOVERY (I --> R) TIME
 		T = e.time + this->exponential_distribution(this->random_number_engine) / this->recovery_rate;
 		this->state_health_future_recovery_time[e.subject] = T;
 		if (T < this->simulation_time)
 		{
 			this->event_queue.emplace(T, e.subject, NULL, epidemic_transport_model::event::ACTION::RECOVERY);
 		}
+
+		// DETERMINE FUTURE IMMUNITY LOSS (R --> S) TIME
+		T = T + this->exponential_distribution(this->random_number_engine) / this->immunity_loss_rate;
+		this->state_health_future_immunity_loss_time[e.subject] = T;
+		if (T < this->simulation_time)
+		{
+			this->event_queue.emplace(T, e.subject, NULL, epidemic_transport_model::event::ACTION::IMMUNITY_LOSS);
+		}
+
 
 		for (auto& n : this->community_contacts[e.subject])
 		{
@@ -399,15 +484,14 @@ void epidemic_transport_model::infection_spreading(const event& e)
 			break;
 	}
 
-
 	switch (e.action)
 	{
 		case epidemic_transport_model::event::ACTION::COMMUNITY_INFECTION:
 		case epidemic_transport_model::event::ACTION::TRANSPORT_INFECTION:
 
-			if (this->state_health_future_recovery_time[e.subject] < this->state_health_future_recovery_time[e.sender])
+			if (this->state_health_future_immunity_loss_time[e.subject] < this->state_health_future_recovery_time[e.sender])
 			{
-				T = std::max(e.time, this->state_health_future_recovery_time[e.subject]) + this->exponential_distribution(this->random_number_engine) / infection_rate;
+				T = std::max(e.time, this->state_health_future_immunity_loss_time[e.subject]) + this->exponential_distribution(this->random_number_engine) / infection_rate;
 				
 				if (T < this->state_health_future_recovery_time[e.sender] && T < T_infection_path_breaking)
 				{
@@ -427,16 +511,28 @@ void epidemic_transport_model::infection_spreading(const event& e)
 
 void epidemic_transport_model::recovery_event_handler(const event& e)
 {
-	this->state_health[e.subject] = epidemic_transport_model::HEALTH::S;
+	this->state_health[e.subject] = epidemic_transport_model::HEALTH::R;
 	this->state_health_future_recovery_time[e.subject] = -std::numeric_limits<double>::infinity();
+}
+
+void epidemic_transport_model::immunity_loss_event_handler(const event& e)
+{
+	this->state_health[e.subject] = epidemic_transport_model::HEALTH::S;
+	this->state_health_future_immunity_loss_time[e.subject] = -std::numeric_limits<double>::infinity();
 }
 
 
 void epidemic_transport_model::update_timeseries(const double& t, const bool& std_out)
 {
+	int S = std::count(this->state_health.begin(), this->state_health.end(), epidemic_transport_model::HEALTH::S);
 	int I = std::count(this->state_health.begin(), this->state_health.end(), epidemic_transport_model::HEALTH::I);
+	int R = std::count(this->state_health.begin(), this->state_health.end(), epidemic_transport_model::HEALTH::R);
 
-	this->timeseries.emplace_back(t, I, (double)I / this->community_size);
+	double s = (double)S / this->community_size;
+	double i = (double)I / this->community_size;
+	double r = (double)R / this->community_size;
+
+	this->timeseries.emplace_back(t, S, I, R, s, i, r);
 	
 	if (std_out)
 	{

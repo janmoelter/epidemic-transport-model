@@ -5,6 +5,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 
 #include <string>
 #include <vector>
@@ -27,13 +28,14 @@ class epidemic_transport_model
 {
 
 public:
-	epidemic_transport_model(const std::string &, const int &, const int &, const double &, const double &, const double &, const double &, const double &);
+	epidemic_transport_model(const std::string &, const int &, const int &, const double &, const double &, const double &, const double &, const double &, const double &);
 	~epidemic_transport_model();
 
 
-	std::list<std::tuple<double, int, double>> simulate(const double &, const bool &);
-	std::list<std::tuple<double, int, double>> simulate(const double &);
+	std::list<std::tuple<double, int, int, int, double, double, double>> simulate(const double &, const bool &);
+	std::list<std::tuple<double, int, int, int, double, double, double>> simulate(const double &);
 
+	friend std::ostream &operator<<(std::ostream &, const epidemic_transport_model &);
 
 	class event
 	{
@@ -76,6 +78,8 @@ private:
 
 	// PARAMATERS
 
+	std::string transport_network_file;
+
 	int world_size;
 	int community_size;
 
@@ -85,6 +89,7 @@ private:
 	double community_infection_rate;
 	double transport_infection_rate;
 	double recovery_rate;
+	double immunity_loss_rate;
 
 	double initial_prevalence;
 
@@ -113,6 +118,7 @@ private:
 
 	std::vector<double> state_site_future_transition_time;
 	std::vector<double> state_health_future_recovery_time;
+	std::vector<double> state_health_future_immunity_loss_time;
 
 	void infer_transport_transition_matrix(void);
 
@@ -121,10 +127,11 @@ private:
 	void move_event_handler(const event &);
 	void infection_event_handler(const event &);
 	void recovery_event_handler(const event &);
+	void immunity_loss_event_handler(const event &);
 
 	void infection_spreading(const event &);
 
-	std::list<std::tuple<double, int, double>> timeseries = std::list<std::tuple<double, int, double>>();
+	std::list<std::tuple<double, int, int, int, double, double, double>> timeseries = std::list<std::tuple<double, int, int, int, double, double, double>>();
 
 	void update_timeseries(const double &, const bool &);
 	void update_timeseries(const double &);
