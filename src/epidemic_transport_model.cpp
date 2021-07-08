@@ -67,20 +67,31 @@ std::ostream& operator<<(std::ostream& ostream, const epidemic_transport_model::
 
 
 
-epidemic_transport_model::epidemic_transport_model(const igraph_t *transport_network, const int& community_size, const int& community_network_degree, const double& initial_prevalence, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
+void epidemic_transport_model::initialize(std::array<igraph_t *,2>& transport_networks, const std::function<double(const double&)>& transport_network_interpolation_functional, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
 {
 	std::mt19937 gen(this->random_number_engine());
 
-	// COPY TRANSPORT NETWORK
+	// COPY TRANSPORT NETWORKS
 
-	igraph_copy(&this->transport_network, transport_network);
+	for (size_t r = 0; r < transport_networks.size(); r++)
+	{
+		igraph_copy(&this->transport_networks[r], transport_networks[r]);
+	}
 
 	// SET REMAINING PARAMETERS
 
-	this->world_size = igraph_vcount(&this->transport_network);
+	this->world_size = igraph_vcount(&this->transport_networks[0]);
+	if (igraph_vcount(&this->transport_networks[1]) != this->world_size)
+	{
+		throw std::invalid_argument("The number of sites in the two transport networks has to be the same.");
+	}
+
+	this->transport_network_interpolation_functional = transport_network_interpolation_functional;
 
 	this->community_size = community_size;
 	this->community_network_degree = community_network_degree;
+
+	this->initial_site = initial_site;
 	this->initial_prevalence = initial_prevalence;
 
 	this->mobility_rate = mobility_rate;
@@ -99,7 +110,7 @@ epidemic_transport_model::epidemic_transport_model(const igraph_t *transport_net
 	igraph_vs_t vs;
 	igraph_vit_t vit;
 
-	for (int n = 0; n < this->community_size; n++)
+	for (size_t n = 0; n < this->community_size; n++)
 	{
 		igraph_vs_adj(&vs, n, IGRAPH_OUT);
 		igraph_vit_create(&this->epidemic_network, vs, &vit);
@@ -120,7 +131,7 @@ epidemic_transport_model::epidemic_transport_model(const igraph_t *transport_net
 	this->state_site = std::vector<int>(this->community_size, 0);
 
 	this->site_occupancy = std::vector<std::set<int>>(this->world_size, std::set<int>());
-	for (int n = 0; n < this->community_size; n++)
+	for (size_t n = 0; n < this->community_size; n++)
 	{
 		this->site_occupancy[0].insert(n);
 	}
@@ -130,12 +141,33 @@ epidemic_transport_model::epidemic_transport_model(const igraph_t *transport_net
 	this->state_health_future_immunity_loss_time = std::vector<double>(this->community_size, -std::numeric_limits<double>::infinity());
 }
 
+epidemic_transport_model::epidemic_transport_model(std::array<igraph_t *,2>& transport_networks, const std::function<double(const double&)>& transport_network_interpolation_functional, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
+{
+	this->initialize(transport_networks, transport_network_interpolation_functional, community_size, community_network_degree, initial_site, initial_prevalence, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
+}
+
+epidemic_transport_model::epidemic_transport_model(igraph_t* transport_network, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
+{
+	std::array<igraph_t *,2> transport_networks = {transport_network, transport_network};
+	std::function<double(const double&)> transport_network_interpolation_functional = [] (double t)->double { return 0.; };
+
+	this->initialize(transport_networks, transport_network_interpolation_functional, community_size, community_network_degree, initial_site, initial_prevalence, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
+}
+
+epidemic_transport_model::epidemic_transport_model()
+{
+
+}
+
 epidemic_transport_model::~epidemic_transport_model()
 {
-	igraph_cattribute_remove_all(&this->transport_network, true, true, true);
-	igraph_cattribute_remove_all(&this->epidemic_network, true, true, true);
+	for (size_t r = 0; r < this->transport_networks.size(); r++)
+	{
+		igraph_cattribute_remove_all(&this->transport_networks[r], true, true, true);
+		igraph_destroy(&this->transport_networks[r]);
+	}
 
-	igraph_destroy(&this->transport_network);
+	igraph_cattribute_remove_all(&this->epidemic_network, true, true, true);
 	igraph_destroy(&this->epidemic_network);
 }
 
@@ -253,63 +285,83 @@ std::ostream& operator<<(std::ostream& ostream, const epidemic_transport_model& 
 }
 
 
-void epidemic_transport_model::infer_transport_transition_matrix()
+void epidemic_transport_model::infer_transport_transition_distributions()
 {
-	this->transport_transition_matrix = std::vector<std::vector<double>>(this->world_size, std::vector<double>(this->world_size, 0.));
-
-	this->transport_transition_distributions = std::vector<std::discrete_distribution<int>>(this->world_size);
-
-	bool is_weighted = igraph_cattribute_has_attr(&this->transport_network, IGRAPH_ATTRIBUTE_EDGE, "weight");
+	std::vector<std::vector<double>> transition_matrix;
+	bool is_directed;
+	bool is_weighted;
 
 	std::tuple<int, int> arc;
 	double weight;
 
-	for (long int a = 0; a < igraph_ecount(&this->transport_network); a++)
+	for (size_t r = 0; r < this->transport_networks.size(); r++)
 	{
-		arc = std::make_tuple((int)IGRAPH_FROM(&this->transport_network, a), (int)IGRAPH_TO(&this->transport_network, a));
+		transition_matrix = std::vector<std::vector<double>>(this->world_size, std::vector<double>(this->world_size, 0.));
+		this->transport_transition_distributions[r] = std::vector<std::discrete_distribution<int>>(this->world_size);
 
-		this->transport_transition_matrix[std::get<0>(arc)][std::get<1>(arc)] = 1.;
-		this->transport_transition_matrix[std::get<1>(arc)][std::get<0>(arc)] = 1.;
-		if (is_weighted)
+		is_directed = igraph_is_directed(&this->transport_networks[r]);
+		is_weighted = igraph_cattribute_has_attr(&this->transport_networks[r], IGRAPH_ATTRIBUTE_EDGE, "weight");
+
+
+		for (long int a = 0; a < igraph_ecount(&this->transport_networks[r]); a++)
 		{
-			weight = EAN(&this->transport_network, "weight", a);
-			if(weight < 0)
+			arc = std::make_tuple((int)IGRAPH_FROM(&this->transport_networks[r], a), (int)IGRAPH_TO(&this->transport_networks[r], a));
+
+
+			if (is_weighted)
 			{
-				std::cout << "Transport network shows negative weights. These will be set to 0.";
-				weight = 0;
+				weight = EAN(&this->transport_networks[r], "weight", a);
+				if(weight < 0)
+				{
+					std::cout << "Transport network has negative weights. These will be set to 0.";
+					weight = 0.;
+				}
+
+				transition_matrix[std::get<0>(arc)][std::get<1>(arc)] = weight;
+			}
+			else
+			{
+				transition_matrix[std::get<0>(arc)][std::get<1>(arc)] = 1.;
 			}
 
-			this->transport_transition_matrix[std::get<0>(arc)][std::get<1>(arc)] *= weight;
-			this->transport_transition_matrix[std::get<1>(arc)][std::get<0>(arc)] *= weight;
+			if (!is_directed)
+			{
+				transition_matrix[std::get<1>(arc)][std::get<0>(arc)] = transition_matrix[std::get<0>(arc)][std::get<1>(arc)];
+			}
 		}
-		
-	}
 
-	double weight_sum;
-
-	for (int x = 0; x < this->world_size; x++)
-	{
-		weight_sum = std::accumulate(this->transport_transition_matrix[x].begin(), this->transport_transition_matrix[x].end(), 0.);
-
-		if (weight_sum > 0.)
+		for (size_t x = 0; x < this->world_size; x++)
 		{
-			std::for_each(this->transport_transition_matrix[x].begin(), this->transport_transition_matrix[x].end(), [weight_sum](double &w){ w /= weight_sum; });
+			this->transport_transition_distributions[r][x] = std::discrete_distribution<int>(transition_matrix[x].begin(), transition_matrix[x].end());
+
+			//for (size_t y = 0; y < this->world_size; y++)
+			//{
+			//	std::cout << std::fixed << std::setw(6) << std::setprecision(2) << transition_matrix[x][y];
+			//}
+			//std::cout << std::endl;
+			
 		}
-
-		//for (int i = 0; i < this->transport_transition_matrix[x].size(); i++)
-		//{
-		//	std::cout << std::fixed << std::setw(7) << std::setprecision(3) << this->transport_transition_matrix[x][i];
-		//}
-		//std::cout << std::endl;
-
-		this->transport_transition_distributions[x] = std::discrete_distribution<int>(this->transport_transition_matrix[x].begin(), this->transport_transition_matrix[x].end());
 	}
+
+
+	//std::vector<double> P;
+	//for (size_t x = 0; x < this->world_size; x++)
+	//{
+	//	for (size_t r = 0; r < 2; r++)
+	//	{
+	//		P = this->transport_transition_distributions[r][x].probabilities();
+    //		for(auto p : P)
+    //    		std::cout << std::fixed << std::setw(6) << std::setprecision(3) << p;
+    //		std::cout << std::endl;
+	//	}
+	//	std::cout << "****************************************************************************************************" << std::endl;
+	//}
 }
 
 void epidemic_transport_model::initialise_dynamics()
 {
 
-	this->infer_transport_transition_matrix();
+	this->infer_transport_transition_distributions();
 
 
 	int x;
@@ -320,16 +372,16 @@ void epidemic_transport_model::initialise_dynamics()
 
 	std::uniform_int_distribution<int> initial_site_distribution;
 
-	if (this->initial_uniform_site_distribution)
-	{
-		initial_site_distribution = std::uniform_int_distribution<int>(0, this->world_size-1);
-	}
-	else
+	if (0 <= this->initial_site && this->initial_site < this->world_size)
 	{
 		initial_site_distribution = std::uniform_int_distribution<int>(this->initial_site, this->initial_site);
 	}
+	else
+	{
+		initial_site_distribution = std::uniform_int_distribution<int>(0, this->world_size-1);
+	}
 
-	for (int n = 0; n < this->community_size; n++)
+	for (size_t n = 0; n < this->community_size; n++)
 	{
 
 		x = 0;
@@ -361,11 +413,12 @@ void epidemic_transport_model::initialise_dynamics()
 
 void epidemic_transport_model::move_event_handler(const event& e)
 {
-	int x;
+	size_t r = (this->uniform_distribution(this->random_number_engine) > this->transport_network_interpolation_functional(e.time)) ? 0 : 1;
+	size_t x;
 
 	x = this->state_site[e.subject];
 	this->site_occupancy[x].erase(e.subject);
-	x = this->transport_transition_distributions[x](this->random_number_engine);
+	x = this->transport_transition_distributions[r][x](this->random_number_engine);
 	this->state_site[e.subject] = x;
 	this->site_occupancy[x].insert(e.subject);
 
@@ -530,7 +583,7 @@ void epidemic_transport_model::print_state()
 {
 	std::cout << "{";
 
-	for (int n = 0; n < this->community_size; n++)
+	for (size_t n = 0; n < this->community_size; n++)
 	{
 		if (this->state_health[n] == epidemic_transport_model::HEALTH::S)
 		{

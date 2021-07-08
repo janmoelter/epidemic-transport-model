@@ -6,6 +6,21 @@
 
 #include "epidemic_transport_model.hpp"
 
+
+void igraph_read_graph_graphmlfile(igraph_t* graph, std::string filename)
+{
+	FILE *ifile;
+
+	ifile = fopen(filename.c_str(), "r");
+	if (ifile == 0)
+	{
+		std::cout << "Cannot open transport network file." << std::endl;
+	}
+
+	igraph_read_graph_graphml(graph, ifile, 0);
+	fclose(ifile);
+}
+
 std::vector<double> linspace(double min, double max, size_t N)
 {
 	std::vector<double> range;
@@ -17,22 +32,23 @@ std::vector<double> linspace(double min, double max, size_t N)
 	return range;
 }
 
-std::map<std::string, std::string> argparse(int argc, char** argv)
+std::map<std::string, std::vector<std::string>> argparse(int argc, char** argv)
 {
-	std::map<std::string, std::string> argm { {"transport-network-file", ""}, {"community-size", ""}, {"community-degree", ""}, {"prevalence", ""}, {"mobility-rate", ""}, {"community-infection-rate", ""}, {"transport-infection-rate", ""}, {"recovery-rate", ""}, {"immunity-loss-rate", ""}, {"time", ""}, {"output-file", ""}, {"verbose", "0"}, };
+	std::map<std::string, std::vector<std::string>> argm { {"transport-network-file", {}}, {"community-size", {}}, {"community-degree", {}}, {"mobility-rate", {}}, {"community-infection-rate", {}}, {"transport-infection-rate", {}}, {"recovery-rate", {}}, {"immunity-loss-rate", {}}, {"time", {}}, {"initial-site", {"inf"}}, {"initial-prevalence", {}}, {"output-file", {}}, {"verbose", {"0"}}, };
 
-	const char* const short_opts = "w:N:k:p:m:B:b:g:s:T:o:vh";
+	const char* const short_opts = "w:N:k:m:B:b:g:s:T:x:p:o:vh";
 	const option long_opts[] = {
 		{"transport-network-file", required_argument, nullptr, 'w'},
 		{"community-size", required_argument, nullptr, 'N'},
 		{"community-degree", required_argument, nullptr, 'k'},
-		{"prevalence", required_argument, nullptr, 'p'},
 		{"mobility-rate", required_argument, nullptr, 'm'},
 		{"community-infection-rate", required_argument, nullptr, 'B'},
 		{"transport-infection-rate", required_argument, nullptr, 'b'},
 		{"recovery-rate", required_argument, nullptr, 'g'},
 		{"immunity-loss-rate", required_argument, nullptr, 's'},
 		{"time", required_argument, nullptr, 'T'},
+		{"initial-site", required_argument, nullptr, 'x'},
+		{"initial-prevalence", required_argument, nullptr, 'p'},
 		{"output-file", required_argument, nullptr, 'o'},
 		{"verbose", no_argument, nullptr, 'v'},
 		{"help", no_argument, nullptr, 'h'},
@@ -49,40 +65,43 @@ std::map<std::string, std::string> argparse(int argc, char** argv)
 		switch (opt)
 		{
 			case 'w':
-				argm["transport-network-file"] = optarg;
+				argm["transport-network-file"].push_back(optarg);
 				break;
 			case 'N':
-				argm["community-size"] = optarg;
+				argm["community-size"].push_back(optarg);
 				break;
 			case 'k':
-				argm["community-degree"] = optarg;
-				break;
-			case 'p':
-				argm["prevalence"] = optarg;
+				argm["community-degree"].push_back(optarg);
 				break;
 			case 'm':
-				argm["mobility-rate"] = optarg;
+				argm["mobility-rate"].push_back(optarg);
 				break;
 			case 'B':
-				argm["community-infection-rate"] = optarg;
+				argm["community-infection-rate"].push_back(optarg);
 				break;
 			case 'b':
-				argm["transport-infection-rate"] = optarg;
+				argm["transport-infection-rate"].push_back(optarg);
 				break;
 			case 'g':
-				argm["recovery-rate"] = optarg;
+				argm["recovery-rate"].push_back(optarg);
 				break;
 			case 's':
-				argm["immunity-loss-rate"] = optarg;
+				argm["immunity-loss-rate"].push_back(optarg);
 				break;
 			case 'T':
-				argm["time"] = optarg;
+				argm["time"].push_back(optarg);
+				break;
+			case 'x':
+				argm["initial-site"].push_back(optarg);
+				break;
+			case 'p':
+				argm["initial-prevalence"].push_back(optarg);
 				break;
 			case 'o':
-				argm["output-file"] = optarg;
+				argm["output-file"].push_back(optarg);
 				break;
 			case 'v':
-				argm["verbose"] = "1";
+				argm["verbose"].push_back("1");
 				break;
 			case 'h':
 			case '?':
@@ -99,44 +118,60 @@ int main(int argc, char **argv)
 	igraph_set_attribute_table(&igraph_cattribute_table);
 
 
-	std::map<std::string, std::string> argm = argparse(argc, argv);
+	std::map<std::string, std::vector<std::string>> argm = argparse(argc, argv);
 
-	std::string transport_network_file = argm["transport-network-file"];
-	int community_size = std::stoi(argm["community-size"]);
-	int community_degree = std::stoi(argm["community-degree"]);
-	double prevalence = std::stod(argm["prevalence"]);
-	double mobility_rate = std::stod(argm["mobility-rate"]);
-	double community_infection_rate = std::stod(argm["community-infection-rate"]);
-	double transport_infection_rate = std::stod(argm["transport-infection-rate"]);
-	double recovery_rate = std::stod(argm["recovery-rate"]);
-	double immunity_loss_rate = std::stod(argm["immunity-loss-rate"]);
+	std::vector<std::string> transport_network_files = argm["transport-network-file"];
+	int community_size = std::stoi(argm["community-size"].back());
+	int community_degree = std::stoi(argm["community-degree"].back());
+	double mobility_rate = std::stod(argm["mobility-rate"].back());
+	double community_infection_rate = std::stod(argm["community-infection-rate"].back());
+	double transport_infection_rate = std::stod(argm["transport-infection-rate"].back());
+	double recovery_rate = std::stod(argm["recovery-rate"].back());
+	double immunity_loss_rate = std::stod(argm["immunity-loss-rate"].back());
 
-	double time = std::stod(argm["time"]);
+	double initial_site = std::stoi(argm["initial-site"].back());
+	double initial_prevalence = std::stod(argm["initial-prevalence"].back());
 
-	std::string output_file = argm["output-file"];
+	double time = std::stod(argm["time"].back());
 
-	bool verbose = (bool)std::stoi(argm["verbose"]);
+	std::string output_file = argm["output-file"].back();
 
-	igraph_t transport_network;
+	bool verbose = (bool)std::stoi(argm["verbose"].back());
 
-	FILE *ifile;
 
-	ifile = fopen(transport_network_file.c_str(), "r");
-	if (ifile == 0) {
-		std::cout << "Cannot open transport network file." << std::endl;
+
+	std::array<igraph_t,2> transport_networks;
+	switch (transport_network_files.size())
+	{
+		case 1:
+		{
+			igraph_read_graph_graphmlfile(&transport_networks[0], transport_network_files[0]);
+			igraph_copy(&transport_networks[1], &transport_networks[0]);
+			break;
+		}
+
+		case 2:
+		{
+			igraph_read_graph_graphmlfile(&transport_networks[0], transport_network_files[0]);
+			igraph_read_graph_graphmlfile(&transport_networks[1], transport_network_files[1]);
+			break;
+		}
+
+		default:
+		{
+			break;
+		}
 	}
 
-	igraph_read_graph_graphml(&transport_network, ifile, 0);
-	fclose(ifile);
+	std::array<igraph_t *,2> _transport_networks = {&transport_networks[0], &transport_networks[1]};
+	epidemic_transport_model _epidemic_transport_model(_transport_networks, [] (double t)->double { return pow(sin(M_PI * t / 2.), 10.); }, community_size, community_degree, initial_site, initial_prevalence, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
 
-
-	epidemic_transport_model _epidemic_transport_model(&transport_network, community_size, community_degree, prevalence, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
-
+	
 	if (verbose)
 	{
 		std::cout << _epidemic_transport_model << std::endl;
 	}
-
+	
 	_epidemic_transport_model.simulate(time);
 	
 	std::ofstream fstream;
@@ -145,13 +180,17 @@ int main(int argc, char **argv)
 	fstream.close();
 
 
-	igraph_cattribute_remove_all(&transport_network, true, true, true);
-	igraph_destroy(&transport_network);
+	igraph_cattribute_remove_all(&transport_networks[0], true, true, true);
+	igraph_cattribute_remove_all(&transport_networks[1], true, true, true);
+
+	igraph_destroy(&transport_networks[0]);
+	igraph_destroy(&transport_networks[1]);
 	
 	if (verbose)
 	{
 		std::cout << "*** END main ***" << std::endl;
 	}
+	
 
 	return 0;
 }
