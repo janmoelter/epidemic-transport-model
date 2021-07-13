@@ -4,6 +4,8 @@
 #include <getopt.h>
 #include <map>
 
+#include <regex>
+
 #include "epidemic_transport_model.hpp"
 
 
@@ -34,11 +36,12 @@ std::vector<double> linspace(double min, double max, size_t N)
 
 std::map<std::string, std::vector<std::string>> argparse(int argc, char** argv)
 {
-	std::map<std::string, std::vector<std::string>> argm { {"transport-network-file", {}}, {"community-size", {}}, {"community-degree", {}}, {"mobility-rate", {}}, {"community-infection-rate", {}}, {"transport-infection-rate", {}}, {"recovery-rate", {}}, {"immunity-loss-rate", {}}, {"time", {}}, {"initial-site", {"inf"}}, {"initial-prevalence", {}}, {"output-file", {}}, {"verbose", {"0"}}, };
+	std::map<std::string, std::vector<std::string>> argm { {"transport-network-file", {}}, {"transport-network-interpolation-function", {}}, {"community-size", {}}, {"community-degree", {}}, {"mobility-rate", {}}, {"community-infection-rate", {}}, {"transport-infection-rate", {}}, {"recovery-rate", {}}, {"immunity-loss-rate", {}}, {"time", {}}, {"initial-site", {"inf"}}, {"initial-prevalence", {}}, {"output-file", {}}, {"verbose", {"0"}}, };
 
-	const char* const short_opts = "w:N:k:m:B:b:g:s:T:x:p:o:vh";
+	const char* const short_opts = "w:f:N:k:m:B:b:g:s:T:x:p:o:vh";
 	const option long_opts[] = {
 		{"transport-network-file", required_argument, nullptr, 'w'},
+		{"transport-network-interpolation-function", required_argument, nullptr, 'w'},
 		{"community-size", required_argument, nullptr, 'N'},
 		{"community-degree", required_argument, nullptr, 'k'},
 		{"mobility-rate", required_argument, nullptr, 'm'},
@@ -66,6 +69,9 @@ std::map<std::string, std::vector<std::string>> argparse(int argc, char** argv)
 		{
 			case 'w':
 				argm["transport-network-file"].push_back(optarg);
+				break;
+			case 'f':
+				argm["transport-network-interpolation-function"].push_back(optarg);
 				break;
 			case 'N':
 				argm["community-size"].push_back(optarg);
@@ -117,10 +123,12 @@ int main(int argc, char **argv)
 {
 	igraph_set_attribute_table(&igraph_cattribute_table);
 
+	std::cout << "+ " << __LINE__ << std::endl;
 
 	std::map<std::string, std::vector<std::string>> argm = argparse(argc, argv);
 
 	std::vector<std::string> transport_network_files = argm["transport-network-file"];
+	std::string transport_network_interpolation_function_string = argm["transport-network-interpolation-function"].back();
 	int community_size = std::stoi(argm["community-size"].back());
 	int community_degree = std::stoi(argm["community-degree"].back());
 	double mobility_rate = std::stod(argm["mobility-rate"].back());
@@ -138,7 +146,7 @@ int main(int argc, char **argv)
 
 	bool verbose = (bool)std::stoi(argm["verbose"].back());
 
-
+	std::cout << "+ " << __LINE__ << std::endl;
 
 	std::array<igraph_t,2> transport_networks;
 	switch (transport_network_files.size())
@@ -164,7 +172,40 @@ int main(int argc, char **argv)
 	}
 
 	std::array<igraph_t *,2> _transport_networks = {&transport_networks[0], &transport_networks[1]};
-	epidemic_transport_model _epidemic_transport_model(_transport_networks, [] (double t)->double { return pow(sin(M_PI * t / 2.), 10.); }, community_size, community_degree, initial_site, initial_prevalence, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
+
+
+	std::function<double(const double&)> transport_network_interpolation_function;
+
+	std::regex function_string_regex("^(\\w*)\\(([+]?\\d*(?:\\.(?:[0-9]+))?);([+-]?\\d*(?:\\.(?:[0-9]+))?)\\)\\+\\+([+]?\\d*(?:\\.(?:[0-9]+))?)$");
+	std::smatch matches;
+	if (std::regex_match(transport_network_interpolation_function_string, matches, function_string_regex))
+	{
+		std::string f_type = matches[1].str();
+		double arg_offset = stod(matches[3].str());
+		double f_width = stod(matches[2].str());
+		double f_period = stod(matches[4].str());
+
+		std::function<double(const double&)> f;
+
+		if (!f_type.compare("square"))
+		{
+			f = [] (double t)->double { return (0. < t && t < 1); };
+		}
+
+		if (!f_type.compare("sine"))
+		{
+			f = [] (double t)->double { return pow(sin(M_PI * t), 2.); };
+		}
+
+		transport_network_interpolation_function = [f, arg_offset, f_width, f_period] (double t)->double { return f(fmin(fmod(t - (arg_offset - f_width/2.), f_period) / f_width, 1.)) * (t > arg_offset - f_width/2.); };
+	}
+	else
+	{
+		throw std::invalid_argument(transport_network_interpolation_function_string);
+	}
+
+
+	epidemic_transport_model _epidemic_transport_model(_transport_networks, transport_network_interpolation_function, community_size, community_degree, initial_site, initial_prevalence, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
 
 	
 	if (verbose)

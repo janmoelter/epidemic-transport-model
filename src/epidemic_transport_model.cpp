@@ -71,12 +71,14 @@ void epidemic_transport_model::initialize(std::array<igraph_t *,2>& transport_ne
 {
 	std::mt19937 gen(this->random_number_engine());
 
+
 	// COPY TRANSPORT NETWORKS
 
 	for (size_t r = 0; r < transport_networks.size(); r++)
 	{
 		igraph_copy(&this->transport_networks[r], transport_networks[r]);
 	}
+
 
 	// SET REMAINING PARAMETERS
 
@@ -384,7 +386,7 @@ void epidemic_transport_model::initialise_dynamics()
 	for (size_t n = 0; n < this->community_size; n++)
 	{
 
-		x = 0;
+		x = this->state_site[n];
 		this->site_occupancy[x].erase(n);
 		x = initial_site_distribution(this->random_number_engine);
 		this->state_site[n] = x;
