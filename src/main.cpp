@@ -36,12 +36,12 @@ std::vector<double> linspace(double min, double max, size_t N)
 
 std::map<std::string, std::vector<std::string>> argparse(int argc, char** argv)
 {
-	std::map<std::string, std::vector<std::string>> argm { {"transport-network-file", {}}, {"transport-network-interpolation-function", {}}, {"community-size", {}}, {"community-degree", {}}, {"mobility-rate", {}}, {"community-infection-rate", {}}, {"transport-infection-rate", {}}, {"recovery-rate", {}}, {"immunity-loss-rate", {}}, {"time", {}}, {"initial-site", {"inf"}}, {"initial-prevalence", {}}, {"output-file", {}}, {"verbose", {"0"}}, };
+	std::map<std::string, std::vector<std::string>> argm { {"transport-network-file", {}}, {"transport-network-interpolation-function", {""}}, {"community-size", {}}, {"community-degree", {}}, {"mobility-rate", {}}, {"community-infection-rate", {}}, {"transport-infection-rate", {}}, {"recovery-rate", {}}, {"immunity-loss-rate", {}}, {"time", {}}, {"initial-site", {"-1"}}, {"initial-prevalence", {}}, {"output-file", {}}, {"verbose", {"0"}}, };
 
 	const char* const short_opts = "w:f:N:k:m:B:b:g:s:T:x:p:o:vh";
 	const option long_opts[] = {
 		{"transport-network-file", required_argument, nullptr, 'w'},
-		{"transport-network-interpolation-function", required_argument, nullptr, 'w'},
+		{"transport-network-interpolation-function", required_argument, nullptr, 'f'},
 		{"community-size", required_argument, nullptr, 'N'},
 		{"community-degree", required_argument, nullptr, 'k'},
 		{"mobility-rate", required_argument, nullptr, 'm'},
@@ -119,6 +119,87 @@ std::map<std::string, std::vector<std::string>> argparse(int argc, char** argv)
 	return argm;
 }
 
+std::function<double(const double&)> transport_network_interpolation_function_parsing(std::string transport_network_interpolation_function_string)
+{
+	std::regex function_string_regex;
+	std::smatch matches;
+
+	// Empty function string "".
+
+	function_string_regex = std::regex(R"(^$)");
+	if (std::regex_match(transport_network_interpolation_function_string, matches, function_string_regex))
+	{
+		return [] (double t)->double { return 0.; };
+	}
+
+	// Function string 'F():t0' for a functions where F defines the function
+	// prototype and t0 its onset.
+	//
+	// For example:
+	//
+	//      
+	//   1 ╴      ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 
+	//            ┃                                      
+	//   0 ━━━━━━━┩┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
+	//           t0
+	//
+
+	function_string_regex = std::regex(R"(^(\w*)\(\)\:([+-]?\d*(?:\.(?:[0-9]+))?)$)");
+	if (std::regex_match(transport_network_interpolation_function_string, matches, function_string_regex))
+	{
+		std::string f_type = matches[1].str();
+		double arg_offset = stod(matches[2].str());
+
+		std::function<double(const double&)> f;
+
+		if (!f_type.compare("theta"))
+		{
+			return [arg_offset] (double t)->double { return 1. * (t > arg_offset); };
+		}
+	}
+
+	// Function string "F(w):t0++T" for a periodic function where F defines the
+	// function prototype, w its width, t0 the first onset and T the function's
+	// period length.
+	//
+	// For example:
+	//
+	//      
+	//   1 ╴      ┏━━━━━━━━━━┓       ┏━━━━━━━━━━┓        
+	//            ┃          ┃       ┃          ┃        
+	//   0 ━━━━━━━┩┄┄┄┄┄┄┄┄┄┄┡━━━━━━━┩┄┄┄┄┄┄┄┄┄┄┡━━━━━━━━
+	//           t0         t0+w
+	//
+	//            │<────── T ───────>│
+	//
+
+	function_string_regex = std::regex(R"(^(\w*)\(([+]?\d*(?:\.(?:[0-9]+))?)\)\:([+-]?\d*(?:\.(?:[0-9]+))?)\+\+((?:[+]?\d*(?:\.(?:[0-9]+))?)|inf)$)");
+	if (std::regex_match(transport_network_interpolation_function_string, matches, function_string_regex))
+	{
+		std::string f_type = matches[1].str();
+		double arg_offset = stod(matches[3].str());
+		double f_width = stod(matches[2].str());
+		double f_period = stod(matches[4].str());
+
+		std::function<double(const double&)> f;
+
+		if (!f_type.compare("square"))
+		{
+			f = [] (double t)->double { return (0. < t && t < 1); };
+		}
+
+		if (!f_type.compare("sine"))
+		{
+			f = [] (double t)->double { return pow(sin(M_PI * t), 2.); };
+		}
+
+		return [f, arg_offset, f_width, f_period] (double t)->double { return f(fmin(fmod(t - (arg_offset), f_period) / f_width, 1.)) * (t > arg_offset); };
+	}
+
+	throw std::invalid_argument(transport_network_interpolation_function_string);
+}
+
+
 int main(int argc, char **argv)
 {
 	igraph_set_attribute_table(&igraph_cattribute_table);
@@ -173,36 +254,7 @@ int main(int argc, char **argv)
 
 	std::array<igraph_t *,2> _transport_networks = {&transport_networks[0], &transport_networks[1]};
 
-
-	std::function<double(const double&)> transport_network_interpolation_function;
-
-	std::regex function_string_regex("^(\\w*)\\(([+]?\\d*(?:\\.(?:[0-9]+))?);([+-]?\\d*(?:\\.(?:[0-9]+))?)\\)\\+\\+([+]?\\d*(?:\\.(?:[0-9]+))?)$");
-	std::smatch matches;
-	if (std::regex_match(transport_network_interpolation_function_string, matches, function_string_regex))
-	{
-		std::string f_type = matches[1].str();
-		double arg_offset = stod(matches[3].str());
-		double f_width = stod(matches[2].str());
-		double f_period = stod(matches[4].str());
-
-		std::function<double(const double&)> f;
-
-		if (!f_type.compare("square"))
-		{
-			f = [] (double t)->double { return (0. < t && t < 1); };
-		}
-
-		if (!f_type.compare("sine"))
-		{
-			f = [] (double t)->double { return pow(sin(M_PI * t), 2.); };
-		}
-
-		transport_network_interpolation_function = [f, arg_offset, f_width, f_period] (double t)->double { return f(fmin(fmod(t - (arg_offset - f_width/2.), f_period) / f_width, 1.)) * (t > arg_offset - f_width/2.); };
-	}
-	else
-	{
-		throw std::invalid_argument(transport_network_interpolation_function_string);
-	}
+	std::function<double(const double&)> transport_network_interpolation_function = transport_network_interpolation_function_parsing(transport_network_interpolation_function_string);
 
 
 	epidemic_transport_model _epidemic_transport_model(_transport_networks, transport_network_interpolation_function, community_size, community_degree, initial_site, initial_prevalence, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
