@@ -34,9 +34,53 @@ std::vector<double> linspace(double min, double max, size_t N)
 	return range;
 }
 
+void print_help()
+{
+	std::cout << "Usage: simulaton -w" << std::endl;
+
+	std::cout << "" << std::endl;
+	//           "****************************************************************************************************"
+	std::cout << "  -w, --transport-network-file=FILE                           File containing a transport network in" << std::endl;
+	std::cout << "                                                              the GraphML-format.                   " << std::endl;
+	std::cout << "  -f, --transport-network-interpolation-function=DESCRIPTION  Function to interpolate between two   " << std::endl;
+	std::cout << "                                                              transport networks (if provided). If  " << std::endl;
+	std::cout << "                                                              empty, the constant zero-function is  " << std::endl;
+	std::cout << "                                                              used. Other options are 'theta():t0'  " << std::endl;
+	std::cout << "                                                              for a Heaviside-theta pulse starting  " << std::endl;
+	std::cout << "                                                              at t0, as well as 'square(w):t0++T'   " << std::endl;
+	std::cout << "                                                              and 'sine(w):t0++T' for periodic      " << std::endl;
+	std::cout << "                                                              square- and sine-pulses with a width  " << std::endl;
+	std::cout << "                                                              w, starting at time t0 and period-    " << std::endl;
+	std::cout << "                                                              length T. Default is ''.              " << std::endl;
+	std::cout << "  -N, --community-size=INTEGER                                Size of the community.                " << std::endl;
+	std::cout << "  -k, --community-degree=INTEGER                              Degree of links in the community.     " << std::endl;
+	std::cout << "  -m, --mobility-rate=NUMBER                                  Mobility rate of the random walk of   " << std::endl;
+	std::cout << "                                                              individuals on the transport network. " << std::endl;
+	std::cout << "  -B, --community-infection-rate=NUMBER                       Infection rate in the community layer " << std::endl;
+	std::cout << "                                                              of the epidemic network.              " << std::endl;
+	std::cout << "  -b, --transport-infection-rate=NUMBER                       Infection rate in the transport layer " << std::endl;
+	std::cout << "                                                              of the epidemic network.              " << std::endl;
+	std::cout << "  -g, --recovery-rate=NUMBER                                  Recovery rate on the epidemic network." << std::endl;
+	std::cout << "  -s, --immunity-loss-rate=NUMBER                             Immunity loss rate on the epidemic    " << std::endl;
+	std::cout << "                                                              network. For SIR- or SIS-epidemics    " << std::endl;
+	std::cout << "                                                              this is 0 or inf, respectively.       " << std::endl;
+	std::cout << "  -T, --time=NUMBER                                           Time-span of the simulation.          " << std::endl;
+	std::cout << "  -x, --initial-site=INTEGER                                  Initial site of individuals in the    " << std::endl;
+	std::cout << "                                                              transport network. Invalid values,    " << std::endl;
+	std::cout << "                                                              result in a uniform distribution.     " << std::endl;
+	std::cout << "                                                              Default is '-1'.                      " << std::endl;
+	std::cout << "  -p, --initial-prevalence=NUMBER                             Initial prevalence of the epidemic in " << std::endl;
+	std::cout << "                                                              the community.                        " << std::endl;
+	std::cout << "  -o, --output-file=FILE                                      Output file for the simulation time-  " << std::endl;
+	std::cout << "                                                              series. If this is empty, standard    " << std::endl;
+	std::cout << "                                                              output is used. Default is ''.        " << std::endl;
+	std::cout << "  -v, --verbose                                               " << std::endl;
+	std::cout << "  -h, --help                                                  " << std::endl;
+}
+
 std::map<std::string, std::vector<std::string>> argparse(int argc, char** argv)
 {
-	std::map<std::string, std::vector<std::string>> argm { {"transport-network-file", {}}, {"transport-network-interpolation-function", {""}}, {"community-size", {}}, {"community-degree", {}}, {"mobility-rate", {}}, {"community-infection-rate", {}}, {"transport-infection-rate", {}}, {"recovery-rate", {}}, {"immunity-loss-rate", {}}, {"time", {}}, {"initial-site", {"-1"}}, {"initial-prevalence", {}}, {"output-file", {}}, {"verbose", {"0"}}, };
+	std::map<std::string, std::vector<std::string>> argm { {"transport-network-file", {}}, {"transport-network-interpolation-function", {""}}, {"community-size", {}}, {"community-degree", {}}, {"mobility-rate", {}}, {"community-infection-rate", {}}, {"transport-infection-rate", {}}, {"recovery-rate", {}}, {"immunity-loss-rate", {}}, {"time", {}}, {"initial-site", {"-1"}}, {"initial-prevalence", {}}, {"output-file", {}}, {"verbose", {"0"}}, {"help", {"0"}}, };
 
 	const char* const short_opts = "w:f:N:k:m:B:b:g:s:T:x:p:o:vh";
 	const option long_opts[] = {
@@ -111,6 +155,8 @@ std::map<std::string, std::vector<std::string>> argparse(int argc, char** argv)
 				break;
 			case 'h':
 			case '?':
+				argm["help"].push_back("1");
+				break;
 			default:
 				break;
 		}
@@ -193,7 +239,7 @@ std::function<double(const double&)> transport_network_interpolation_function_pa
 			f = [] (double t)->double { return pow(sin(M_PI * t), 2.); };
 		}
 
-		return [f, arg_offset, f_width, f_period] (double t)->double { return f(fmin(fmod(t - (arg_offset), f_period) / f_width, 1.)) * (t > arg_offset); };
+		return [f, arg_offset, f_width, f_period] (double t)->double { return f(fmin(fmod(t - arg_offset, f_period) / f_width, 1.)) * (t > arg_offset); };
 	}
 
 	throw std::invalid_argument(transport_network_interpolation_function_string);
@@ -204,9 +250,17 @@ int main(int argc, char **argv)
 {
 	igraph_set_attribute_table(&igraph_cattribute_table);
 
-	std::cout << "+ " << __LINE__ << std::endl;
+	//std::cout << "+ " << __LINE__ << std::endl;
 
 	std::map<std::string, std::vector<std::string>> argm = argparse(argc, argv);
+
+
+	bool help = (bool)std::stoi(argm["help"].back());
+	if (help == true)
+	{
+		print_help();
+		return 0;
+	}
 
 	std::vector<std::string> transport_network_files = argm["transport-network-file"];
 	std::string transport_network_interpolation_function_string = argm["transport-network-interpolation-function"].back();
@@ -227,7 +281,7 @@ int main(int argc, char **argv)
 
 	bool verbose = (bool)std::stoi(argm["verbose"].back());
 
-	std::cout << "+ " << __LINE__ << std::endl;
+	
 
 	std::array<igraph_t,2> transport_networks;
 	switch (transport_network_files.size())
