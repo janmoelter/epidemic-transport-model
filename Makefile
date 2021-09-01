@@ -1,7 +1,13 @@
 CXX=clang++
-#CXX=g++
 CXXFLAGS=-g -std=c++17 -O3
-LDFLAGS=-ligraph -lxml2 -lblas -lm #-lgsl -lblas -lm
+LDFLAGS=-ligraph -lxml2
+
+ifneq ($(CXX),icc)
+LDFLAGS+=-lblas -lm
+else
+LDFLAGS+=${MKL_SHLIB}
+endif
+
 RM=rm -rf
 MKDIR=mkdir -p
 
