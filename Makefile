@@ -1,6 +1,6 @@
 CXX=clang++
 CXXFLAGS=-g -std=c++17 -O3
-LDFLAGS=-ligraph -lxml2
+LDFLAGS=-ligraph -lxml2 -larmadillo
 
 ifneq ($(CXX),icc)
 LDFLAGS+=-lblas -lm

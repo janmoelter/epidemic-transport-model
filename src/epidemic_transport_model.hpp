@@ -23,6 +23,7 @@
 
 #include <stdexcept>
 
+#include <armadillo>
 #include <igraph/igraph.h>
 
 class epidemic_transport_model
@@ -30,8 +31,8 @@ class epidemic_transport_model
 
 public:
 	epidemic_transport_model();
-	epidemic_transport_model(std::array<igraph_t *,2> &, const std::function<double(const double&)> &, const int &, const int &, const int &, const double &, const double &, const double &, const double &, const double &, const double &);
-	epidemic_transport_model(igraph_t *, const int &, const int &, const int &, const double &, const double &, const double &, const double &, const double &, const double &);
+	epidemic_transport_model(std::array<igraph_t *,2> &, const std::function<double(const double&)> &, const int &, const int &, const int &, const double &, const double &, const double &, const double &, const double &, const double &, const double &);
+	epidemic_transport_model(igraph_t *, const int &, const int &, const int &, const double &, const double &, const double &, const double &, const double &, const double &, const double &);
 	
 	~epidemic_transport_model();
 
@@ -72,7 +73,7 @@ public:
 
 private:
 
-	void initialize(std::array<igraph_t *,2> &, const std::function<double(const double&)> &, const int &, const int &, const int &, const double &, const double &, const double &, const double &, const double &, const double &);
+	void initialize(std::array<igraph_t *,2> &, const std::function<double(const double&)> &, const int &, const int &, const int &, const double &, const double &, const double &, const double &, const double &, const double &, const double &);
 
 	std::random_device random_number_engine;
 
@@ -98,8 +99,10 @@ private:
 	double recovery_rate;
 	double immunity_loss_rate;
 
-	int initial_site = 0;
+	int initial_site;
 	double initial_prevalence;
+
+	double fractional_exponent;
 
 	// ---------
 

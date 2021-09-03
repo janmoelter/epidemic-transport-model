@@ -67,7 +67,7 @@ std::ostream& operator<<(std::ostream& ostream, const epidemic_transport_model::
 
 
 
-void epidemic_transport_model::initialize(std::array<igraph_t *,2>& transport_networks, const std::function<double(const double&)>& transport_network_interpolation_functional, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
+void epidemic_transport_model::initialize(std::array<igraph_t *,2>& transport_networks, const std::function<double(const double&)>& transport_network_interpolation_functional, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& fractional_exponent, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
 {
 	std::mt19937 gen(this->random_number_engine());
 
@@ -95,6 +95,8 @@ void epidemic_transport_model::initialize(std::array<igraph_t *,2>& transport_ne
 
 	this->initial_site = initial_site;
 	this->initial_prevalence = initial_prevalence;
+
+	this->fractional_exponent = fractional_exponent;
 
 	this->mobility_rate = mobility_rate;
 	this->community_infection_rate = community_infection_rate;
@@ -143,17 +145,17 @@ void epidemic_transport_model::initialize(std::array<igraph_t *,2>& transport_ne
 	this->state_health_future_immunity_loss_time = std::vector<double>(this->community_size, -std::numeric_limits<double>::infinity());
 }
 
-epidemic_transport_model::epidemic_transport_model(std::array<igraph_t *,2>& transport_networks, const std::function<double(const double&)>& transport_network_interpolation_functional, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
+epidemic_transport_model::epidemic_transport_model(std::array<igraph_t *,2>& transport_networks, const std::function<double(const double&)>& transport_network_interpolation_functional, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& fractional_exponent, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
 {
-	this->initialize(transport_networks, transport_network_interpolation_functional, community_size, community_network_degree, initial_site, initial_prevalence, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
+	this->initialize(transport_networks, transport_network_interpolation_functional, community_size, community_network_degree, initial_site, initial_prevalence, fractional_exponent, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
 }
 
-epidemic_transport_model::epidemic_transport_model(igraph_t* transport_network, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
+epidemic_transport_model::epidemic_transport_model(igraph_t* transport_network, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& fractional_exponent, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
 {
 	std::array<igraph_t *,2> transport_networks = {transport_network, transport_network};
 	std::function<double(const double&)> transport_network_interpolation_functional = [] (double t)->double { return 0.; };
 
-	this->initialize(transport_networks, transport_network_interpolation_functional, community_size, community_network_degree, initial_site, initial_prevalence, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
+	this->initialize(transport_networks, transport_network_interpolation_functional, community_size, community_network_degree, initial_site, initial_prevalence, fractional_exponent, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
 }
 
 epidemic_transport_model::epidemic_transport_model()
@@ -245,6 +247,7 @@ std::ostream& operator<<(std::ostream& ostream, const epidemic_transport_model& 
 	ostream << "* community size : " << _.community_size << std::endl;
 	ostream << "* community degree : " << _.community_network_degree << std::endl;
 	ostream << "* initial prevalence : " << _.initial_prevalence << std::endl;
+	ostream << "* fractional exponent : " << _.fractional_exponent << std::endl;
 	ostream << "* mobility rate : " << _.mobility_rate << std::endl;
 	ostream << "* community infection rate : " << _.community_infection_rate << std::endl;
 	ostream << "* transport infection rate : " << _.transport_infection_rate << std::endl;
@@ -331,6 +334,45 @@ void epidemic_transport_model::infer_transport_transition_distributions()
 				transition_matrix[std::get<1>(arc)][std::get<0>(arc)] = transition_matrix[std::get<0>(arc)][std::get<1>(arc)];
 			}
 		}
+
+		// COMPUTE FRACTIONAL DYNAMICS
+
+		if (this->fractional_exponent != 1.)
+		{
+			double a = this->fractional_exponent;
+
+			arma::mat laplacian(this->world_size, this->world_size, arma::fill::zeros);
+			for (size_t x = 0; x < this->world_size; x++)
+			{
+				laplacian.row(x) = arma::conv_to<arma::rowvec>::from(transition_matrix[x]);
+			}
+
+			laplacian = arma::diagmat(arma::sum(laplacian, 1)) - laplacian;
+			if (!laplacian.is_symmetric())
+			{
+				std::cout << "Laplacian appears to not be symmetric." << std::endl;
+			}
+
+			arma::vec e;
+			arma::mat U;
+			arma::eig_sym(e, U, laplacian);
+
+			e.clamp(0, arma::trace(laplacian));
+			e.transform( [a](double x) { return std::pow(x, a); } );
+
+			laplacian = U * arma::diagmat(e) * U.t();
+			arma::mat _transition_matrix = laplacian;
+			_transition_matrix.each_col() /= arma::diagvec(laplacian);
+			_transition_matrix = arma::eye<arma::mat>(this->world_size, this->world_size) - _transition_matrix;
+
+
+			for (size_t x = 0; x < this->world_size; x++)
+			{
+				transition_matrix[x] = arma::conv_to<std::vector<double>>::from(_transition_matrix.row(x));
+			}
+		}
+
+
 
 		for (size_t x = 0; x < this->world_size; x++)
 		{
