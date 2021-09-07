@@ -34,11 +34,21 @@ std::vector<double> linspace(double min, double max, size_t N)
 	return range;
 }
 
+void print_version()
+{
+	std::cout << "Epidemic-Transport-Model Simulation (Compilation: " << __DATE__ << " @ " << __TIME__ << ")" << std::endl;
+}
+
 void print_help()
 {
-	std::cout << "Usage: simulaton -w" << std::endl;
+	print_version();
 
 	std::cout << "" << std::endl;
+	std::cout << "Usage: simulaton -w FILE ..." << std::endl;
+	std::cout << "   or  simulaton -w FILE -w FILE -f FUNCTION ..." << std::endl;
+
+	std::cout << "" << std::endl;
+	std::cout << "Options:" << std::endl;
 	//           "****************************************************************************************************"
 	std::cout << "  -w, --transport-network-file=FILE                           File containing a transport network in" << std::endl;
 	std::cout << "                                                              the GraphML-format.                   " << std::endl;
@@ -51,7 +61,8 @@ void print_help()
 	std::cout << "                                                              and 'sine(w):t0++T' for periodic      " << std::endl;
 	std::cout << "                                                              square- and sine-pulses with a width  " << std::endl;
 	std::cout << "                                                              w, starting at time t0 and period-    " << std::endl;
-	std::cout << "                                                              length T. Default is ''.              " << std::endl;
+	std::cout << "                                                              length T. Required only if two        " << std::endl;
+	std::cout << "                                                              transport network files are submitted." << std::endl;
 	std::cout << "  -N, --community-size=INTEGER                                Size of the community.                " << std::endl;
 	std::cout << "  -k, --community-degree=INTEGER                              Degree of links in the community.     " << std::endl;
 	std::cout << "  -m, --mobility-rate=NUMBER                                  Mobility rate of the random walk of   " << std::endl;
@@ -82,9 +93,9 @@ void print_help()
 
 std::map<std::string, std::vector<std::string>> argparse(int argc, char** argv)
 {
-	std::map<std::string, std::vector<std::string>> argm { {"transport-network-file", {}}, {"transport-network-interpolation-function", {""}}, {"community-size", {}}, {"community-degree", {}}, {"mobility-rate", {}}, {"community-infection-rate", {}}, {"transport-infection-rate", {}}, {"recovery-rate", {}}, {"immunity-loss-rate", {}}, {"time", {}}, {"initial-site", {"-1"}}, {"initial-prevalence", {}}, {"fractional-exponent", {"1"}}, {"output-file", {""}}, {"verbose", {"0"}}, {"help", {"0"}}, };
+	std::map<std::string, std::vector<std::string>> argm { {"transport-network-file", {}}, {"transport-network-interpolation-function", {}}, {"community-size", {}}, {"community-degree", {}}, {"mobility-rate", {}}, {"community-infection-rate", {}}, {"transport-infection-rate", {}}, {"recovery-rate", {}}, {"immunity-loss-rate", {}}, {"time", {}}, {"initial-site", {"-1"}}, {"initial-prevalence", {}}, {"fractional-exponent", {"1"}}, {"output-file", {""}}, {"verbose", {"0"}}, {"help", {"0"}}, {"version", {"0"}}, };
 
-	const char* const short_opts = "w:f:N:k:m:B:b:g:s:T:x:p:a:o:vh";
+	const char* const short_opts = "w:f:N:k:m:B:b:g:s:T:x:p:a:o:vhV";
 	const option long_opts[] = {
 		{"transport-network-file", required_argument, nullptr, 'w'},
 		{"transport-network-interpolation-function", required_argument, nullptr, 'f'},
@@ -102,6 +113,7 @@ std::map<std::string, std::vector<std::string>> argparse(int argc, char** argv)
 		{"output-file", required_argument, nullptr, 'o'},
 		{"verbose", no_argument, nullptr, 'v'},
 		{"help", no_argument, nullptr, 'h'},
+		{"version", no_argument, nullptr, 'V'},
 		{nullptr, no_argument, nullptr, 0}
 	};
 
@@ -159,12 +171,34 @@ std::map<std::string, std::vector<std::string>> argparse(int argc, char** argv)
 			case 'v':
 				argm["verbose"].push_back("1");
 				break;
+			case 'V':
+				argm["version"].push_back("1");
+				break;
 			case 'h':
 			case '?':
 				argm["help"].push_back("1");
 				break;
 			default:
 				break;
+		}
+	}
+
+	if (argm["transport-network-file"].size() < 2)
+	{
+		argm["transport-network-interpolation-function"].push_back("");
+	}
+
+	if (argm["transport-network-file"].size() > 2)
+	{
+		argm["help"].push_back("1");
+	}
+
+	for (auto& [opt, arg] : argm)
+	{
+		if (arg.size() == 0)
+		{
+			argm["help"].push_back("1");
+			break;
 		}
 	}
 
@@ -260,6 +294,13 @@ int main(int argc, char **argv)
 
 	std::map<std::string, std::vector<std::string>> argm = argparse(argc, argv);
 
+
+	bool version = (bool)std::stoi(argm["version"].back());
+	if (version == true)
+	{
+		print_version();
+		return 0;
+	}
 
 	bool help = (bool)std::stoi(argm["help"].back());
 	if (help == true)
