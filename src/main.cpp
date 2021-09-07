@@ -337,6 +337,10 @@ int main(int argc, char **argv)
 		fstream << _epidemic_transport_model << std::endl;
 		fstream.close();
 	}
+	else
+	{
+		std::cout << _epidemic_transport_model << std::endl;
+	}
 
 	igraph_cattribute_remove_all(&transport_networks[0], true, true, true);
 	igraph_cattribute_remove_all(&transport_networks[1], true, true, true);
