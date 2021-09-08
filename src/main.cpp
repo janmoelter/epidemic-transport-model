@@ -354,7 +354,6 @@ int main(int argc, char **argv)
 			break;
 		}
 	}
-
 	std::array<igraph_t *,2> _transport_networks = {&transport_networks[0], &transport_networks[1]};
 
 	std::function<double(const double&)> transport_network_interpolation_function = transport_network_interpolation_function_parsing(transport_network_interpolation_function_string);

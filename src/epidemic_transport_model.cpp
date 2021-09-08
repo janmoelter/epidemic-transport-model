@@ -358,7 +358,7 @@ void epidemic_transport_model::infer_transport_transition_distributions()
 			arma::eig_sym(e, U, laplacian);
 
 			e.clamp(0, arma::trace(laplacian));
-			e.transform( [a](double x) { return std::pow(x, a); } );
+			e.transform( [a](double x) { return x > 0 ? std::pow(x, a) : 0; } );
 
 			laplacian = U * arma::diagmat(e) * U.t();
 			arma::mat _transition_matrix = laplacian;
