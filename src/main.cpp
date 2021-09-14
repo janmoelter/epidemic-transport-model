@@ -6,6 +6,8 @@
 
 #include <regex>
 
+#include <chrono>
+
 #include "epidemic_transport_model.hpp"
 
 
@@ -288,6 +290,8 @@ std::function<double(const double&)> transport_network_interpolation_function_pa
 
 int main(int argc, char **argv)
 {
+	auto start_time = std::chrono::steady_clock::now();
+
 	igraph_set_attribute_table(&igraph_cattribute_table);
 
 	//std::cout << "+ " << __LINE__ << std::endl;
@@ -388,11 +392,13 @@ int main(int argc, char **argv)
 	igraph_destroy(&transport_networks[0]);
 	igraph_destroy(&transport_networks[1]);
 	
+
+	auto end_time = std::chrono::steady_clock::now();
 	if (verbose)
 	{
-		std::cout << "*** END main ***" << std::endl;
+		std::chrono::duration<double> elapsed_time = end_time - start_time;
+		std::cout << "*** END main (" << elapsed_time.count() << "s) ***" << std::endl;
 	}
-	
 
 	return 0;
 }
