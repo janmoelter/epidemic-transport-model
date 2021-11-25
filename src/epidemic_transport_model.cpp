@@ -305,6 +305,7 @@ void epidemic_transport_model::infer_transport_transition_distributions()
 		this->transport_transition_distributions[r] = std::vector<std::discrete_distribution<int>>(this->world_size);
 
 		is_directed = igraph_is_directed(&this->transport_networks[r]);
+		//std::cout << "Transport network is directed." << std::endl;
 		is_weighted = igraph_cattribute_has_attr(&this->transport_networks[r], IGRAPH_ATTRIBUTE_EDGE, "weight");
 
 
@@ -350,22 +351,22 @@ void epidemic_transport_model::infer_transport_transition_distributions()
 			laplacian = arma::diagmat(arma::sum(laplacian, 1)) - laplacian;
 			if (!laplacian.is_symmetric())
 			{
-				std::cout << "Laplacian appears to not be symmetric." << std::endl;
+				throw std::invalid_argument("The transport network needs to be symmetric when the fractional exponent is less than 1.");
 			}
-
+			
 			arma::vec e;
 			arma::mat U;
 			arma::eig_sym(e, U, laplacian);
-
+			
 			e.clamp(0, arma::trace(laplacian));
 			e.transform( [a](double x) { return x > 0 ? std::pow(x, a) : 0; } );
-
+			
 			laplacian = U * arma::diagmat(e) * U.t();
 			arma::mat _transition_matrix = laplacian;
 			_transition_matrix.each_col() /= arma::diagvec(laplacian);
 			_transition_matrix = arma::eye<arma::mat>(this->world_size, this->world_size) - _transition_matrix;
-
-
+			
+			
 			for (size_t x = 0; x < this->world_size; x++)
 			{
 				transition_matrix[x] = arma::conv_to<std::vector<double>>::from(_transition_matrix.row(x));
