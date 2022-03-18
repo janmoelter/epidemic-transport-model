@@ -31,16 +31,19 @@ class epidemic_transport_model
 
 public:
 	epidemic_transport_model();
-	epidemic_transport_model(std::array<igraph_t *,2> &, const std::function<double(const double&)> &, const int &, const int &, const int &, const double &, const double &, const double &, const double &, const double &, const double &, const double &);
-	epidemic_transport_model(igraph_t *, const int &, const int &, const int &, const double &, const double &, const double &, const double &, const double &, const double &, const double &);
-	
+	epidemic_transport_model(const std::array<igraph_t,2>&, const std::function<double(const double&)>&, const int&, const int&, const int&, const double&, const double&, const double&, const double&, const double&, const double&, const double&);
+	epidemic_transport_model(const igraph_t&, const int&, const int&, const int&, const double&, const double&, const double&, const double&, const double&, const double&, const double&);
+	epidemic_transport_model(const epidemic_transport_model&);
+
 	~epidemic_transport_model();
 
+	epidemic_transport_model& operator=(const epidemic_transport_model&);
 
-	std::list<std::tuple<double, int, int, int, double, double, double>> simulate(const double &, const bool &);
-	std::list<std::tuple<double, int, int, int, double, double, double>> simulate(const double &);
 
-	friend std::ostream &operator<<(std::ostream &, const epidemic_transport_model &);
+	std::list<std::tuple<double, int, int, int, double, double, double>> simulate(const double&, const bool&);
+	std::list<std::tuple<double, int, int, int, double, double, double>> simulate(const double&);
+
+	friend std::ostream &operator<<(std::ostream&, const epidemic_transport_model&);
 
 	class event
 	{
@@ -56,7 +59,7 @@ public:
 			IMMUNITY_LOSS
 		};
 
-		event(const double &, const int &, const int &, const event::ACTION &);
+		event(const double&, const int&, const int&, const event::ACTION&);
 		event();
 		~event();
 
@@ -66,16 +69,16 @@ public:
 		event::ACTION action;
 
 	public:
-		friend bool operator<(const epidemic_transport_model::event &, const epidemic_transport_model::event &);
+		friend bool operator<(const epidemic_transport_model::event&, const epidemic_transport_model::event&);
 
-		friend std::ostream &operator<<(std::ostream &, const epidemic_transport_model::event &);
+		friend std::ostream &operator<<(std::ostream&, const epidemic_transport_model::event&);
 	};
 
 private:
 
-	void initialize(std::array<igraph_t *,2> &, const std::function<double(const double&)> &, const int &, const int &, const int &, const double &, const double &, const double &, const double &, const double &, const double &, const double &);
+	void initialize(const std::array<igraph_t,2>&, const std::function<double(const double&)>&, const int&, const int&, const int&, const double&, const double&, const double&, const double&, const double&, const double&, const double&);
 
-	std::random_device random_number_engine;
+	std::mt19937_64 random_number_engine;
 
 	double simulation_time = std::numeric_limits<double>::infinity();
 	std::priority_queue<event> event_queue;
@@ -132,17 +135,17 @@ private:
 
 	void initialise_dynamics(void);
 
-	void move_event_handler(const event &);
-	void infection_event_handler(const event &);
-	void recovery_event_handler(const event &);
-	void immunity_loss_event_handler(const event &);
+	void move_event_handler(const event&);
+	void infection_event_handler(const event&);
+	void recovery_event_handler(const event&);
+	void immunity_loss_event_handler(const event&);
 
-	void infection_spreading(const event &);
+	void infection_spreading(const event&);
 
 	std::list<std::tuple<double, int, int, int, double, double, double>> timeseries = std::list<std::tuple<double, int, int, int, double, double, double>>();
 
-	void update_timeseries(const double &, const bool &);
-	void update_timeseries(const double &);
+	void update_timeseries(const double&, const bool&);
+	void update_timeseries(const double&);
 
 	void print_state(void);
 };

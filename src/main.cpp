@@ -11,30 +11,6 @@
 #include "epidemic_transport_model.hpp"
 
 
-void igraph_read_graph_graphmlfile(igraph_t* graph, std::string filename)
-{
-	FILE *ifile;
-
-	ifile = fopen(filename.c_str(), "r");
-	if (ifile == 0)
-	{
-		std::cout << "Cannot open transport network file." << std::endl;
-	}
-
-	igraph_read_graph_graphml(graph, ifile, 0);
-	fclose(ifile);
-}
-
-std::vector<double> linspace(double min, double max, size_t N)
-{
-	std::vector<double> range;
-
-	double delta = (max - min) / double(N);
-	for (int i = 0; i < (N + 1); i++) {
-		range.push_back(min + i * delta);
-	}
-	return range;
-}
 
 void print_version()
 {
@@ -287,6 +263,20 @@ std::function<double(const double&)> transport_network_interpolation_function_pa
 	throw std::invalid_argument(transport_network_interpolation_function_string);
 }
 
+void igraph_read_graph_graphmlfile(igraph_t* graph, std::string filename)
+{
+	FILE *ifile;
+
+	ifile = fopen(filename.c_str(), "r");
+	if (ifile == 0)
+	{
+		std::cout << "Cannot open transport network file." << std::endl;
+	}
+
+	igraph_read_graph_graphml(graph, ifile, 0);
+	fclose(ifile);
+}
+
 
 int main(int argc, char **argv)
 {
@@ -336,20 +326,38 @@ int main(int argc, char **argv)
 
 	
 
-	std::array<igraph_t,2> transport_networks;
+	epidemic_transport_model _epidemic_transport_model;
+
+	
 	switch (transport_network_files.size())
 	{
 		case 1:
 		{
-			igraph_read_graph_graphmlfile(&transport_networks[0], transport_network_files[0]);
-			igraph_copy(&transport_networks[1], &transport_networks[0]);
+			igraph_t transport_network;
+			igraph_read_graph_graphmlfile(&transport_network, transport_network_files[0]);
+
+			_epidemic_transport_model = epidemic_transport_model(transport_network, community_size, community_degree, initial_site, initial_prevalence, fractional_exponent, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
+
+			igraph_cattribute_remove_all(&transport_network, true, true, true);
+			igraph_destroy(&transport_network);
 			break;
 		}
 
 		case 2:
 		{
-			igraph_read_graph_graphmlfile(&transport_networks[0], transport_network_files[0]);
-			igraph_read_graph_graphmlfile(&transport_networks[1], transport_network_files[1]);
+			std::array<igraph_t,2> transport_networks;
+			for (size_t r = 0; r < transport_networks.size(); r++)
+			{
+				igraph_read_graph_graphmlfile(&transport_networks[r], transport_network_files[r]);
+			}
+
+			_epidemic_transport_model = epidemic_transport_model(transport_networks, transport_network_interpolation_function_parsing(transport_network_interpolation_function_string), community_size, community_degree, initial_site, initial_prevalence, fractional_exponent, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
+
+			for (size_t r = 0; r < transport_networks.size(); r++)
+			{
+				igraph_cattribute_remove_all(&transport_networks[r], true, true, true);
+				igraph_destroy(&transport_networks[r]);
+			}
 			break;
 		}
 
@@ -358,20 +366,15 @@ int main(int argc, char **argv)
 			break;
 		}
 	}
-	std::array<igraph_t *,2> _transport_networks = {&transport_networks[0], &transport_networks[1]};
-
-	std::function<double(const double&)> transport_network_interpolation_function = transport_network_interpolation_function_parsing(transport_network_interpolation_function_string);
 
 
-	epidemic_transport_model _epidemic_transport_model(_transport_networks, transport_network_interpolation_function, community_size, community_degree, initial_site, initial_prevalence, fractional_exponent, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
+	_epidemic_transport_model.simulate(time);
 
-	
+
 	if (verbose)
 	{
 		std::cout << _epidemic_transport_model << std::endl;
 	}
-	
-	_epidemic_transport_model.simulate(time);
 
 	if (strcmp(output_file.c_str(), "") != 0)
 	{
@@ -383,14 +386,11 @@ int main(int argc, char **argv)
 	}
 	else
 	{
-		std::cout << _epidemic_transport_model << std::endl;
+		if (!verbose)
+		{
+			std::cout << _epidemic_transport_model << std::endl;
+		}
 	}
-
-	igraph_cattribute_remove_all(&transport_networks[0], true, true, true);
-	igraph_cattribute_remove_all(&transport_networks[1], true, true, true);
-
-	igraph_destroy(&transport_networks[0]);
-	igraph_destroy(&transport_networks[1]);
 	
 
 	auto end_time = std::chrono::steady_clock::now();

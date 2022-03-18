@@ -1,13 +1,9 @@
 #include "epidemic_transport_model.hpp"
 
-
-
 epidemic_transport_model::event::event(const double& time, const int& subject, const int& sender, const epidemic_transport_model::event::ACTION& action)
+	: time(time), subject(subject), sender(sender), action(action)
 {
-	this->time = time;
-	this->subject = subject;
-	this->sender = sender;
-	this->action = action;
+
 }
 
 epidemic_transport_model::event::event()
@@ -67,16 +63,14 @@ std::ostream& operator<<(std::ostream& ostream, const epidemic_transport_model::
 
 
 
-void epidemic_transport_model::initialize(std::array<igraph_t *,2>& transport_networks, const std::function<double(const double&)>& transport_network_interpolation_functional, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& fractional_exponent, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
+void epidemic_transport_model::initialize(const std::array<igraph_t,2>& transport_networks, const std::function<double(const double&)>& transport_network_interpolation_functional, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& fractional_exponent, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
 {
-	std::mt19937 gen(this->random_number_engine());
-
 
 	// COPY TRANSPORT NETWORKS
 
 	for (size_t r = 0; r < transport_networks.size(); r++)
 	{
-		igraph_copy(&this->transport_networks[r], transport_networks[r]);
+		igraph_copy(&this->transport_networks[r], &transport_networks[r]);
 	}
 
 
@@ -145,22 +139,33 @@ void epidemic_transport_model::initialize(std::array<igraph_t *,2>& transport_ne
 	this->state_health_future_immunity_loss_time = std::vector<double>(this->community_size, -std::numeric_limits<double>::infinity());
 }
 
-epidemic_transport_model::epidemic_transport_model(std::array<igraph_t *,2>& transport_networks, const std::function<double(const double&)>& transport_network_interpolation_functional, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& fractional_exponent, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
+epidemic_transport_model::epidemic_transport_model(const std::array<igraph_t,2>& transport_networks, const std::function<double(const double&)>& transport_network_interpolation_functional, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& fractional_exponent, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
+	: random_number_engine(std::random_device()())
 {
 	this->initialize(transport_networks, transport_network_interpolation_functional, community_size, community_network_degree, initial_site, initial_prevalence, fractional_exponent, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
 }
 
-epidemic_transport_model::epidemic_transport_model(igraph_t* transport_network, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& fractional_exponent, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
+epidemic_transport_model::epidemic_transport_model(const igraph_t& transport_network, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& fractional_exponent, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
+	: random_number_engine(std::random_device()())
 {
-	std::array<igraph_t *,2> transport_networks = {transport_network, transport_network};
+	std::array<igraph_t,2> transport_networks = {transport_network, transport_network};
 	std::function<double(const double&)> transport_network_interpolation_functional = [] (double t)->double { return 0.; };
 
 	this->initialize(transport_networks, transport_network_interpolation_functional, community_size, community_network_degree, initial_site, initial_prevalence, fractional_exponent, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
 }
 
-epidemic_transport_model::epidemic_transport_model()
+epidemic_transport_model::epidemic_transport_model(const epidemic_transport_model& _epidemic_transport_model)
+	: random_number_engine(std::random_device()())
 {
+	this->initialize(_epidemic_transport_model.transport_networks, _epidemic_transport_model.transport_network_interpolation_functional, _epidemic_transport_model.community_size, _epidemic_transport_model.community_network_degree, _epidemic_transport_model.initial_site, _epidemic_transport_model.initial_prevalence, _epidemic_transport_model.fractional_exponent, _epidemic_transport_model.mobility_rate, _epidemic_transport_model.community_infection_rate, _epidemic_transport_model.transport_infection_rate, _epidemic_transport_model.recovery_rate, _epidemic_transport_model.immunity_loss_rate);
+}
 
+epidemic_transport_model::epidemic_transport_model()
+	: random_number_engine(std::random_device()())
+{
+	igraph_empty(&this->transport_networks[0], 0, false);
+	igraph_empty(&this->transport_networks[1], 0, false);
+	igraph_empty(&this->epidemic_network, 0, false);
 }
 
 epidemic_transport_model::~epidemic_transport_model()
@@ -170,9 +175,18 @@ epidemic_transport_model::~epidemic_transport_model()
 		igraph_cattribute_remove_all(&this->transport_networks[r], true, true, true);
 		igraph_destroy(&this->transport_networks[r]);
 	}
-
+	
 	igraph_cattribute_remove_all(&this->epidemic_network, true, true, true);
 	igraph_destroy(&this->epidemic_network);
+}
+
+epidemic_transport_model& epidemic_transport_model::operator=(const epidemic_transport_model& _epidemic_transport_model)
+{
+	if (this != &_epidemic_transport_model)
+	{
+		this->initialize(_epidemic_transport_model.transport_networks, _epidemic_transport_model.transport_network_interpolation_functional, _epidemic_transport_model.community_size, _epidemic_transport_model.community_network_degree, _epidemic_transport_model.initial_site, _epidemic_transport_model.initial_prevalence, _epidemic_transport_model.fractional_exponent, _epidemic_transport_model.mobility_rate, _epidemic_transport_model.community_infection_rate, _epidemic_transport_model.transport_infection_rate, _epidemic_transport_model.recovery_rate, _epidemic_transport_model.immunity_loss_rate);
+	}
+	return *this;
 }
 
 
@@ -286,6 +300,8 @@ std::ostream& operator<<(std::ostream& ostream, const epidemic_transport_model& 
 
 	}
 
+	ostream << std::defaultfloat;
+
 	return ostream;
 }
 
@@ -395,9 +411,9 @@ void epidemic_transport_model::infer_transport_transition_distributions()
 	//	for (size_t r = 0; r < 2; r++)
 	//	{
 	//		P = this->transport_transition_distributions[r][x].probabilities();
-    //		for(auto p : P)
-    //    		std::cout << std::fixed << std::setw(6) << std::setprecision(3) << p;
-    //		std::cout << std::endl;
+	//		for(auto p : P)
+	//    		std::cout << std::fixed << std::setw(6) << std::setprecision(3) << p;
+	//		std::cout << std::endl;
 	//	}
 	//	std::cout << "****************************************************************************************************" << std::endl;
 	//}

@@ -1,4 +1,5 @@
 CXX=clang++
+#CXX=gcc
 CXXFLAGS=-g -std=c++17 -O3
 LDFLAGS=-ligraph -lxml2 -larmadillo
 
