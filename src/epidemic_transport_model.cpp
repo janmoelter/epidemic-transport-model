@@ -444,6 +444,7 @@ void epidemic_transport_model::initialise_dynamics()
 
 	for (size_t n = 0; n < this->community_size; n++)
 	{
+		this->state_health[n] = epidemic_transport_model::HEALTH::S;
 
 		x = this->state_site[n];
 		this->site_occupancy[x].erase(n);
