@@ -63,7 +63,7 @@ std::ostream& operator<<(std::ostream& ostream, const epidemic_transport_model::
 
 
 
-void epidemic_transport_model::initialize(const std::array<igraph_t,2>& transport_networks, const std::function<double(const double&)>& transport_network_interpolation_functional, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& fractional_exponent, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
+void epidemic_transport_model::initialize(const std::array<igraph_t,2>& transport_networks, const std::function<double(const double&)>& transport_network_interpolation_functional, const int& community_size, const std::vector<int>& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& fractional_exponent, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
 {
 
 	// COPY TRANSPORT NETWORKS
@@ -101,7 +101,40 @@ void epidemic_transport_model::initialize(const std::array<igraph_t,2>& transpor
 
 	// CREATE A RANDOM EPIDEMIC COMMUNITY NETWORK
 
-	igraph_k_regular_game(&this->epidemic_network, this->community_size, this->community_network_degree, false, false);
+	if (this->community_network_degree.size() > 1)
+	{
+		igraph_vector_t outdeg;
+
+		igraph_vector_init(&outdeg, 0);
+		//std::cout << igraph_vector_size(&outdeg) << std::endl;
+		igraph_vector_reserve(&outdeg, this->community_network_degree.size());
+
+		for (auto& k : this->community_network_degree)
+		{
+			igraph_vector_push_back(&outdeg, k);
+		}
+
+		igraph_vector_shuffle(&outdeg);
+
+		igraph_bool_t is_graphical;
+		igraph_is_graphical(&outdeg, NULL, IGRAPH_SIMPLE_SW, &is_graphical);
+
+		if (is_graphical)
+		{
+			//igraph_degree_sequence_game(&this->epidemic_network, &outdeg, NULL, IGRAPH_DEGSEQ_SIMPLE_NO_MULTIPLE_UNIFORM);
+			igraph_degree_sequence_game(&this->epidemic_network, &outdeg, NULL, IGRAPH_DEGSEQ_SIMPLE_NO_MULTIPLE);
+		}
+		else
+		{
+			throw std::invalid_argument("The degree distribution is not graphical.");
+		}
+		
+		igraph_vector_destroy(&outdeg);
+	}
+	else
+	{
+		igraph_k_regular_game(&this->epidemic_network, this->community_size, this->community_network_degree[0], false, false);
+	}
 
 	this->community_contacts = std::vector<std::set<int>>(this->community_size);
 	
@@ -139,13 +172,13 @@ void epidemic_transport_model::initialize(const std::array<igraph_t,2>& transpor
 	this->state_health_future_immunity_loss_time = std::vector<double>(this->community_size, -std::numeric_limits<double>::infinity());
 }
 
-epidemic_transport_model::epidemic_transport_model(const std::array<igraph_t,2>& transport_networks, const std::function<double(const double&)>& transport_network_interpolation_functional, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& fractional_exponent, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
+epidemic_transport_model::epidemic_transport_model(const std::array<igraph_t,2>& transport_networks, const std::function<double(const double&)>& transport_network_interpolation_functional, const int& community_size, const std::vector<int>& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& fractional_exponent, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
 	: random_number_engine(std::random_device()())
 {
 	this->initialize(transport_networks, transport_network_interpolation_functional, community_size, community_network_degree, initial_site, initial_prevalence, fractional_exponent, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
 }
 
-epidemic_transport_model::epidemic_transport_model(const igraph_t& transport_network, const int& community_size, const int& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& fractional_exponent, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
+epidemic_transport_model::epidemic_transport_model(const igraph_t& transport_network, const int& community_size, const std::vector<int>& community_network_degree, const int& initial_site, const double& initial_prevalence, const double& fractional_exponent, const double& mobility_rate, const double& community_infection_rate, const double& transport_infection_rate, const double& recovery_rate, const double& immunity_loss_rate)
 	: random_number_engine(std::random_device()())
 {
 	std::array<igraph_t,2> transport_networks = {transport_network, transport_network};
@@ -259,7 +292,12 @@ std::ostream& operator<<(std::ostream& ostream, const epidemic_transport_model& 
 	ostream << std::setfill('*') << std::setw(80) << "" << std::endl;
 	ostream << "* transport network : " << "*" << std::endl;
 	ostream << "* community size : " << _.community_size << std::endl;
-	ostream << "* community degree : " << _.community_network_degree << std::endl;
+	ostream << "* community degree : ";
+	for (auto& k : std::set<int>(_.community_network_degree.begin(), _.community_network_degree.end()))
+	{
+		ostream << std::count(_.community_network_degree.begin(), _.community_network_degree.end(), k) << "*" << k << ",";
+	}
+	ostream << "\b " << std::endl;
 	ostream << "* initial prevalence : " << _.initial_prevalence << std::endl;
 	ostream << "* fractional exponent : " << _.fractional_exponent << std::endl;
 	ostream << "* mobility rate : " << _.mobility_rate << std::endl;

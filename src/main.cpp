@@ -263,6 +263,42 @@ std::function<double(const double&)> transport_network_interpolation_function_pa
 	throw std::invalid_argument(transport_network_interpolation_function_string);
 }
 
+std::vector<int> community_network_degree_parsing(std::string community_network_degree_string)
+{
+	std::regex string_regex;
+	std::smatch matches;
+
+	string_regex = std::regex(R"(^(?:(?:\d{1,}\*)?\d{1,},)*(?:\d{1,}\*)?\d{1,}$)");
+	if (std::regex_match(community_network_degree_string, matches, string_regex))
+	{
+		std::vector<int> community_network_degree;
+
+		string_regex = std::regex(R"(^(?:(\d{1,})\*)?(\d{1,})$)");
+		int m;
+		int k;
+
+		std::stringstream _stringstream(community_network_degree_string);
+    	std::string item;
+    	while (std::getline(_stringstream, item, ','))
+		{
+    	    if (item.length() > 0)
+			{
+				if (std::regex_match(item, matches, string_regex))
+				{
+					m = matches[1].length() > 0 ? stoi(matches[1].str()) : 1;
+					k = stoi(matches[2].str());
+
+					community_network_degree.insert(community_network_degree.end(), m, k);
+				}
+    	    }
+    	}
+
+		return community_network_degree;
+	}
+
+	throw std::invalid_argument(community_network_degree_string);
+}
+
 void igraph_read_graph_graphmlfile(igraph_t* graph, std::string filename)
 {
 	FILE *ifile;
@@ -304,9 +340,14 @@ int main(int argc, char **argv)
 	}
 
 	std::vector<std::string> transport_network_files = argm["transport-network-file"];
-	std::string transport_network_interpolation_function_string = argm["transport-network-interpolation-function"].back();
+	std::function<double(const double&)> transport_network_interpolation_function = transport_network_interpolation_function_parsing(argm["transport-network-interpolation-function"].back());
 	int community_size = std::stoi(argm["community-size"].back());
-	int community_degree = std::stoi(argm["community-degree"].back());
+	std::vector<int> community_degree = community_network_degree_parsing(argm["community-degree"].back());
+	if (community_degree.size() > 1 && community_size != community_degree.size())
+	{
+		community_size = community_degree.size();
+	}
+
 	double mobility_rate = std::stod(argm["mobility-rate"].back());
 	double community_infection_rate = std::stod(argm["community-infection-rate"].back());
 	double transport_infection_rate = std::stod(argm["transport-infection-rate"].back());
@@ -324,8 +365,8 @@ int main(int argc, char **argv)
 
 	bool verbose = (bool)std::stoi(argm["verbose"].back());
 
-	
 
+	
 	epidemic_transport_model _epidemic_transport_model;
 
 	
@@ -351,7 +392,7 @@ int main(int argc, char **argv)
 				igraph_read_graph_graphmlfile(&transport_networks[r], transport_network_files[r]);
 			}
 
-			_epidemic_transport_model = epidemic_transport_model(transport_networks, transport_network_interpolation_function_parsing(transport_network_interpolation_function_string), community_size, community_degree, initial_site, initial_prevalence, fractional_exponent, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
+			_epidemic_transport_model = epidemic_transport_model(transport_networks, transport_network_interpolation_function, community_size, community_degree, initial_site, initial_prevalence, fractional_exponent, mobility_rate, community_infection_rate, transport_infection_rate, recovery_rate, immunity_loss_rate);
 
 			for (size_t r = 0; r < transport_networks.size(); r++)
 			{

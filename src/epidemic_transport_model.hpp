@@ -31,8 +31,8 @@ class epidemic_transport_model
 
 public:
 	epidemic_transport_model();
-	epidemic_transport_model(const std::array<igraph_t,2>&, const std::function<double(const double&)>&, const int&, const int&, const int&, const double&, const double&, const double&, const double&, const double&, const double&, const double&);
-	epidemic_transport_model(const igraph_t&, const int&, const int&, const int&, const double&, const double&, const double&, const double&, const double&, const double&, const double&);
+	epidemic_transport_model(const std::array<igraph_t,2>&, const std::function<double(const double&)>&, const int&, const std::vector<int>&, const int&, const double&, const double&, const double&, const double&, const double&, const double&, const double&);
+	epidemic_transport_model(const igraph_t&, const int&, const std::vector<int>&, const int&, const double&, const double&, const double&, const double&, const double&, const double&, const double&);
 	epidemic_transport_model(const epidemic_transport_model&);
 
 	~epidemic_transport_model();
@@ -76,7 +76,7 @@ public:
 
 private:
 
-	void initialize(const std::array<igraph_t,2>&, const std::function<double(const double&)>&, const int&, const int&, const int&, const double&, const double&, const double&, const double&, const double&, const double&, const double&);
+	void initialize(const std::array<igraph_t,2>&, const std::function<double(const double&)>&, const int&, const std::vector<int>&, const int&, const double&, const double&, const double&, const double&, const double&, const double&, const double&);
 
 	std::mt19937_64 random_number_engine;
 
@@ -94,7 +94,7 @@ private:
 	int world_size;
 	int community_size;
 
-	int community_network_degree;
+	std::vector<int> community_network_degree;
 
 	double mobility_rate;
 	double community_infection_rate;
