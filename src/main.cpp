@@ -40,7 +40,7 @@ void print_help()
 	std::cout << "                                                              square- and sine-pulses with a width  " << std::endl;
 	std::cout << "                                                              w, starting at time t0 and period-    " << std::endl;
 	std::cout << "                                                              length T. Required only if two        " << std::endl;
-	std::cout << "                                                              transport network files are submitted." << std::endl;
+	std::cout << "                                                              transport network files are provided. " << std::endl;
 	std::cout << "  -N, --community-size=INTEGER                                Size of the community.                " << std::endl;
 	std::cout << "  -k, --community-degree=INTEGER                              Degree of links in the community.     " << std::endl;
 	std::cout << "  -m, --mobility-rate=NUMBER                                  Mobility rate of the random walk of   " << std::endl;
