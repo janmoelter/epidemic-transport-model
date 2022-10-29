@@ -1,4 +1,4 @@
-# Epidemic-Transport-Simulation
+# Epidemic-Transport-Model
 
 In this repository, we publish the code that has been used to perform the numerical simulations in
 

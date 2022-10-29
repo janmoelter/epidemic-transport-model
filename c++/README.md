@@ -1,5 +1,6 @@
+# Epidemic-Transport-Model (C++)
 
-# Dependecies
+## Dependecies
 
 The code depends on 3rd-party libraries for importing networks and to perform linear algebra. We compile these libraries from source and install them locally so no root access is necessary.
 
@@ -15,7 +16,7 @@ export LIBRARY_PATH="${HOME}/Library/lib64${LIBRARY_PATH:+:${LIBRARY_PATH}}"
 export LD_LIBRARY_PATH="${HOME}/Library/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 ```
 
-## Build `igraph` library
+### Build `igraph` library
 
 In order to handle networks, we use the [igraph](https://igraph.org/) library. We use the following instructions to build it from source.
 
@@ -28,7 +29,7 @@ cmake --build .
 cmake --install .
 ```
 
-## Build `armadillo` library
+### Build `armadillo` library
 
 In order to perform fractional dynamics, we require a linear algebra library and will use the [Armadillo](http://arma.sourceforge.net/) library. We use the following instructions to build it from source.
 
@@ -40,7 +41,7 @@ cmake . -DDETECT_HDF5=OFF -DBUILD_SHARED_LIBS=ON -DCMAKE_INSTALL_PREFIX=$LIBRARY
 make install
 ```
 
-# Build simulation
+## Build simulation
 
 Due to its dependence on `igraph`, we need to link to the BLAS libraries.
 
